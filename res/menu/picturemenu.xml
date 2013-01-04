@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android" >
+    <item android:id="@+id/takepic_btn" 
+        android:showAsAction="ifRoom"
+        android:title="Picture"
+    	android:actionViewClass="android.widget.ImageButton">
+    </item>
+    <item android:id="@+id/effects_btn" 
+        android:showAsAction="ifRoom"
+        android:title="Effects"
+    	android:actionViewClass="android.widget.ImageButton">
+    </item>
+    
+
+</menu>
