@@ -1,12 +1,19 @@
 #include "string"
 #include "math.h"
 #include <time.h>
+#include "queue"
 
 #include "processing.h"
 #include "heap.h"
 
 #define kernelSize 5
 #define p 0.1
+#define WEAK_EDGE 128
+#define STRONG_EDGE 255
+
+#define PI 3.14159265
+
+using namespace std;
 
 void optimizedCanny(AndroidBitmapInfo &info, void *pixels) {
 	time_t start,end;
@@ -20,7 +27,7 @@ void optimizedCanny(AndroidBitmapInfo &info, void *pixels) {
 	void* tempLine;
 
 	//Gaussian filtering
-	double sigma = 0.8;
+	double sigma = 0.5;
 
 	double *kernel_1D = new double[kernelSize];
 
@@ -46,17 +53,24 @@ void optimizedCanny(AndroidBitmapInfo &info, void *pixels) {
 	int *image = new int[info.height * info.width];
 	LOGI("Start Gaussian Filtering");
 	//I*G(X)
-	for(int i = 0; i < info.height; i++) {
+	for(int i = x0; i < info.height-x0; i++) {
 
 		line = (rgba *) lpSrc;
 		for(int j = x0; j < info.width - x0; j++) {
+
 			index = i*w+j;
 			value = 0;
-			for(int x = -x0; x <= x0; x++) {
-				value += kernel_1D[x+x0] * line[j+x].red;
+
+			//don't convolute on the edges of the image
+			if ( i <= x0 || j <= x0 || i >= (info.height - x0) || j  >= (info.width - x0)) {
+				array_one[index] = 0;
+			} else {
+				for(int x = -x0; x <= x0; x++) {
+					value += kernel_1D[x+x0] * line[j+x].red;
+				}
+				image[index] = line[j].red;
+				array_one[index] = value/sum;
 			}
-			image[index] = line[j].red;
-			array_one[index] = value/sum;
 		}
 		lpSrc = (char *) lpSrc + info.stride;
 	}
@@ -64,17 +78,25 @@ void optimizedCanny(AndroidBitmapInfo &info, void *pixels) {
 	lpSrc = pixels;
 
 	//I*G(Y)
-	for(int i = x0; i < info.height - x0; i++) {
+	for(int i = 0; i < info.height; i++) {
 		for(int j = 0; j < info.width; j++) {
 			value = 0;
-			for(int x = -x0; x <= x0; x++) {
-				value += kernel_1D[x+x0] * image[(i+x) * w + j];
+			index = i*w+j;
+			if ( i <= x0 || j <= x0 || i >= (info.height - x0) || j  >= (info.width - x0)) {
+				array_two[index] = 0;
+			} else {
+				for(int x = -x0; x <= x0; x++) {
+					value += kernel_1D[x+x0] * image[(i+x) * w + j];
+				}
+				array_two[index] = value/sum;
 			}
-			array_two[i*w+j] = value/sum;
 		}
 	}
 	LOGI("Start Sobel Convolution");
-	//gradient magnitudes
+
+	/*
+	 * Convolute image using Sobel kernels for x and y
+	 */
 	int sx[3][3] = {-1, 0, 1,
 					-2, 0, 2,
 					-1, 0, 1};
@@ -85,9 +107,10 @@ void optimizedCanny(AndroidBitmapInfo &info, void *pixels) {
 
 	double valuex, valuey;
 
-	for(int i = 1; i < info.height - 1; i++) {
-		for(int j = 1; j < info.width - 1; j++) {
+	for(int i = 1; i < info.height-1; i++) {
+		for(int j = 1; j < info.width-1; j++) {
 			index = i*w+j;
+
 			valuex = 0;
 			valuey = 0;
 			for(int x = -1; x <= 1; x++) {
@@ -97,26 +120,37 @@ void optimizedCanny(AndroidBitmapInfo &info, void *pixels) {
 				}
 			}
 
-			array_three[index] = valuex; //igx
+			/*
+			 * Save in array 3 and 4
+			 */
+			array_three[index] = valuex; 	 //igx
 			array_four[index] = valuey;		 //igy
-
-			//array_one[i*w+j] = sqrt(valuex*valuex + valuey*valuey)/(4*sqrt(2.0));
-			//array_two[i*w+j] = atan2(valuey, valuex);
 		}
 	}
 
 	LOGI("Start computing orientation");
 
+	/*
+	 * Compute magnitude and orientation fo each pixel
+	 */
 	for(int i = 0; i < info.height; i++) {
 		for(int j = 0; j < info.width; j++) {
-			index = i*w+j;
-			array_one[index] = sqrt(array_three[index]*array_three[index] + array_four[index]*array_four[index])/(4*sqrt(2.0));
-			array_two[index] = atan2(array_four[index], array_three[index]);
+			if (i == 0 || j == 0 || i == (info.height-1) || j == (info.width - 1)) {
+				array_one[index] = 0;
+				array_two[index] = 0;
+			} else {
+				index = i*w+j;
+				array_one[index] = sqrt(array_three[index]*array_three[index] + array_four[index]*array_four[index])/(4*sqrt(2.0));
+				array_two[index] = atan2(array_four[index], array_three[index]);
+			}
 		}
 	}
 	LOGI("Start non-maxima suppression");
 	double pi = 4.0*atan(1.0);
-	//non-maxima suppresion
+
+	/*
+	 * Perform non maxima supression
+	 */
 	double pi8 = pi/8.0;
 	double pi4 = pi/4.0;
 	double pi2 = pi/2.0;
@@ -198,12 +232,15 @@ void optimizedCanny(AndroidBitmapInfo &info, void *pixels) {
 	 * array_three - maxima
 	 * array_four - thresh
 	 */
-	for(int i = 1; i < info.height - 1; i++) {
-		line = (rgba *) pixels;
+	for(int i = 0; i < info.height ; i++) {
 
-		for(int j = 1; j < info.width - 1; j++) {
+		for(int j = 0; j < info.width; j++) {
 			index = i*w+j;
-			if (array_three[index] > th) {
+			line = (rgba*) getPixel(pixels,j,i,info.stride,sizeof(rgba));
+
+			if ( i == 0 || j == 0 || i == (info.height - 1) || j  == (info.width - 1)) {
+				array_four[index] = 0;
+			} else if (array_three[index] > th) {
 				array_four[index] = 255;
 			} else if (array_three[index] > 0.4 * th) {
 				array_four[index] = 128;
@@ -211,12 +248,53 @@ void optimizedCanny(AndroidBitmapInfo &info, void *pixels) {
 				array_four[index] = 0;
 			}
 
-			line[j].red = array_four[index];
-			line[j].green = array_four[index];
-			line[j].blue = array_four[index];
+			line->red = array_four[index];
+			line->blue = array_four[index];
+			line->green = array_four[index];
+
 		}
-		pixels = (char *) pixels + info.stride;
 	}
+
+	/*
+	 *	Perform edge linking through hysteresis
+	 */
+	/*queue<Point2D> q;
+	Point2D currentP;
+	for (int i = 1; i < info.height-1; i++) {
+		for (int j = 1; j < info.width-1; j++) {
+
+			index = j + i * info.width;
+
+			if (array_four[index] == STRONG_EDGE) {
+				currentP.populate(j,i,array_four[index]);
+				q.push(currentP);
+				q = bfs(array_four,q,currentP.x, currentP.y,1, info.width);
+			}
+		}
+	}
+
+	/*
+	 * Delete weak edges which are not linked
+
+	for (int i = 0; i < info.height; i++) {
+		for (int j = 0; j < info.width; j++) {
+
+			index = j + i * info.width;
+			LOGI("%d", index);
+			line = (rgba*) getPixel(pixels,j,i,info.stride,sizeof(rgba));
+
+			if (array_four[index] == WEAK_EDGE) {
+				//array_four[index] = 0;
+				line->red = 0;
+				line->blue = 0;
+				line->green = 0;
+			} else {
+				line->red = array_four[index];
+				line->blue = array_four[index];
+				line->green = array_four[index];
+			}
+		}
+	}*/
 
 	double dif;
 
@@ -225,9 +303,8 @@ void optimizedCanny(AndroidBitmapInfo &info, void *pixels) {
 
 	pixels = src;
 	LOGI("Finished int %.2lf seconds", dif);
-
-
 }
+
 /*
  *	Applies the Canny edge detection filter on the image. It assumes a 8 bit grayscale image.
  */
@@ -243,7 +320,7 @@ void processingCanny(AndroidBitmapInfo &info, void *pixels) {
 	void* tempLine;
 
 	//Gaussian filtering
-	double sigma = 0.9;
+	double sigma = 0.8;
 
 	double *kernel_1D = new double[kernelSize];
 
@@ -294,7 +371,10 @@ void processingCanny(AndroidBitmapInfo &info, void *pixels) {
 			gaussian[i*w+j] = value/sum;
 		}
 	}
-	//gradient magnitudes
+
+	/*
+	 * Sobel kernels for x and y
+	 */
 	int sx[3][3] = {-1, 0, 1,
 					-2, 0, 2,
 					-1, 0, 1};
@@ -495,7 +575,7 @@ void processingHough(AndroidBitmapInfo &info, void *pixels) {
 	}
 
 	/* Non maxima suppression */
-	int n = 5; //5, 7
+	int n = 7; //5, 7
 	int m = (n-1)/2;
 	int houghSz = diag * 360;
 
@@ -513,57 +593,35 @@ void processingHough(AndroidBitmapInfo &info, void *pixels) {
 
 	for(int i = m; i < diag - m; i++) {
 		for(int j = m; j < 360 - m; j++) {
-			max = true;
-			for(int k = -m; k <= m; k++) {
-				for(int l = -m; l <=m; l++) {
-					if (H[i+k][j+l] > H[i][j]) {
-						max = false;
+			//check for a threshold
+			if (H[i][j] > 10) {
+				max = true;
+				for(int k = -m; k <= m; k++) {
+					for(int l = -m; l <=m; l++) {
+						if (H[i+k][j+l] > H[i][j]) {
+							max = false;
+						}
 					}
 				}
-			}
 
-			if (max) {
-				//if (H[i][j] > 100) {
-					/*
-					lm[nrMax] = H[i][j];
-					ro[nrMax] = i;
-					teta[nrMax] = j;*/
+				if (max) {
 					nrMax++;
 					current.lm = H[i][j];
 					current.ro = i;
 					current.teta = j;
 					heapInsert(&heap,current);
-				//}
+				}
 			}
 
 		}
 	}
 
-	//sort
-	/*
-	int aux;
-
-	for(int i = 0; i < nrMax-1; i++) {
-		for(int j = i+1; j < nrMax; j++) {
-			if (lm[i] < lm[j]) {
-				aux = lm[i];
-				lm[i] = lm[j];
-				lm[j] = aux;
-
-				aux = ro[i];
-				ro[i] = ro[j];
-				ro[j] = aux;
-
-				aux = teta[i];
-				teta[i] = teta[j];
-				teta[j] = aux;
-			}
-		}
-	}*/
 	pixels = src;
-	int k = 20; /* Number of lines to display */
+	int k = 2; /* Number of lines to display */
 	//k = nrMax;
-
+	if (k > nrMax) {
+		k = nrMax;
+	}
 	double x0 = 0;
 	double y0 = 0;
 	double x1 = 0;
@@ -652,7 +710,86 @@ void drawLine(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, i
 			current->blue = (uint8_t) 0;
 		}
 	}
-
 }
 
+queue<Point2D> bfs(void* pixels, queue<Point2D> q, int x, int y, int pixelWidth, int stride) {
+	Point2D current = q.front();
+	q.pop();
+	Point2D neigh;
+	void* imageData;
+	int* currentNeighbour;
+	int pointValue;
+	for (int dx = -1; dx <= 1; dx++) {
+		for (int dy = -1; dy <= 1; dy++) {
+			imageData = getPixel(pixels, current.x+dx, current.y+dy, stride, pixelWidth);
+			currentNeighbour = (int*) imageData;
 
+			if (*currentNeighbour == WEAK_EDGE) {
+				*currentNeighbour = STRONG_EDGE;
+				neigh.populate(current.x+dx, current.y+dy, *currentNeighbour);
+				q.push(neigh);
+			}
+		}
+	}
+
+	return q;
+}
+
+void* getPixel(void* pixels,int dx, int dy, int stride, int width) {
+	return (char*) pixels + dx * width + dy * stride;
+}
+
+void copyBufferToImage(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer) {
+
+	for (int y = 0; y < info.height; y++) {
+		rgba * line = (rgba *) pixels;
+		for (int x = 0; x < info.width; x++) {
+			buffer[y*info.width+x] = line[x].red;
+		}
+		pixels = (char *) pixels + info.stride;
+	}
+}
+
+void copyImageToBuffer(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer) {
+	int index;
+	for (int y = 0; y < info.height; y++) {
+		rgba * line = (rgba *) pixels;
+		for (int x = 0; x < info.width; x++) {
+			index = y*info.width+x;
+
+			line[x].red = buffer[index];
+			line[x].green = buffer[index];
+			line[x].blue = buffer[index];
+		}
+		pixels = (char *) pixels + info.stride;
+	}
+}
+
+/*
+ * The intersection of two lines defined by (ro1, teta1), (ro2, teta2) is the
+ * solution of system of equations:
+ *
+ * ro1 = x * cos(teta1) + y * sin(teta1)
+ * ro2 = x * cos(teta2) + y * cos(teta2)
+ *
+ * Multiplication by PI/180 necesary because sin and cos work with radians.
+ *
+ * Hopefully casting to int will be ok.
+ */
+Point2D intersectionOfLines(int ro1, int teta1, int ro2, int teta2) {
+	Point2D point;
+
+	point.x = (1.0 * ro1 * sin (teta2 * PI/180) - 1.0 * ro2 * sin(teta1* PI/180))/sin((teta2-teta1) * PI/180);
+	point.y = (1.0 * ro1 * cos (teta2 * PI/180) - 1.0 * ro2 * cos(teta1* PI/180))/sin((teta1-teta2) * PI/180);
+
+	return point;
+}
+
+/*
+ * Return true if the point is on straight line defined by the parameters ro and teta.
+ *
+ * Multiplication by PI/180 necesary because sin and cos work with radians.
+ */
+bool isOnLine(int x, int y, int ro, int teta) {
+	return (ro = x * cos(teta * PI/180) + y * sin (teta * PI/180));
+}

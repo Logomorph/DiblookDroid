@@ -6,9 +6,9 @@
 #define RIGHT(i) 2*i+1
 
 struct houghLM {
-	int lm; //localmaxim
-	int ro;
-	int teta;
+	float lm; //localmaxim
+	float ro;
+	float teta;
 };
 
 struct Heap {
