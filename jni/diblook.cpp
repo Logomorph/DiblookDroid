@@ -49,8 +49,13 @@ JNIEXPORT void JNICALL Java_com_awk_pics_MainActivity_processImage(JNIEnv * env,
 		processingHough(info, pixels);
 		break;
 	case Canny_Hough_Ransac:
+<<<<<<< HEAD
 		drawLine(info, pixels, 0,0,100,100);
 		intersectionOfLines(141,45, )
+=======
+		//drawLine(info, pixels, 0,0,102,100);
+		processingRansac(info, pixels);
+>>>>>>> a7eb886d0a4f2be0395857d4e038409f0d8c8544
 		break;
 	case Zebra_Crossing:
 		//TODO add calls to canny, hough, ransac and check for color switches along detected lines
