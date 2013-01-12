@@ -53,9 +53,12 @@ typedef struct Point{
 
 void processingInvert(AndroidBitmapInfo &info,void *pixels);
 void processingCanny(AndroidBitmapInfo &info,void *pixels);
-void optimizedCanny(AndroidBitmapInfo &info,void *pixels);
-void processingHough(AndroidBitmapInfo &info,void *pixels);
 
+void optimizedCanny(AndroidBitmapInfo &info,void *pixels);
+void optimizedCanny(AndroidBitmapInfo &info,uint8_t *pixels);
+
+void processingHough(AndroidBitmapInfo &info,void *pixels);
+void processingHough(AndroidBitmapInfo &info, uint8_t *pixels);
 /*
  * Helper functions for accessing pixels
  */
@@ -69,5 +72,6 @@ void copyBufferToImage(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer);
 void copyImageToBuffer(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer);
 
 void drawLine(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, int end_x, int end_y);
+void drawLineBressenham(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, int end_x, int end_y);
 
 #endif /* PROCESSING_H_ */

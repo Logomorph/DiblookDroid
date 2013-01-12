@@ -8,7 +8,6 @@
 #include "processing.h"
 #include "string"
 
-
 void processingInvert(AndroidBitmapInfo &info, void *pixels) {
 	LOGI("Inverting...");
 	for (int y = 0; y < info.height; y++) {

@@ -53,6 +53,11 @@ JNIEXPORT void JNICALL Java_com_awk_pics_MainActivity_processImage(JNIEnv * env,
 		break;
 	case Zebra_Crossing:
 		//TODO add calls to canny, hough, ransac and check for color switches along detected lines
+		uint8_t* buffer = new uint8_t[info.width * info.height];
+		copyImageToBuffer(info, pixels,buffer);
+		optimizedCanny(info, buffer);
+		//processingHough(info, buffer);
+		copyBufferToImage(info,pixels,buffer);
 		break;
 
 	}
