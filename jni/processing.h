@@ -51,6 +51,21 @@ typedef struct Point{
 
 } Point2D;
 
+struct Color {
+	int r, g, b;
+	Color (int R, int G, int B) {
+		r = R;
+		g = G;
+		b = B;
+	}
+	static Color Red() {
+		return Color(255,0,0);
+	}
+	static Color Green() {
+		return Color(0,255,0);
+	}
+};
+
 void processingInvert(AndroidBitmapInfo &info,void *pixels);
 void processingCanny(AndroidBitmapInfo &info,void *pixels);
 
@@ -59,6 +74,8 @@ void optimizedCanny(AndroidBitmapInfo &info,uint8_t *pixels);
 
 void processingHough(AndroidBitmapInfo &info,void *pixels);
 void processingHough(AndroidBitmapInfo &info, uint8_t *pixels);
+
+void processingRansac(AndroidBitmapInfo &info, void* pixels);
 /*
  * Helper functions for accessing pixels
  */
@@ -72,6 +89,12 @@ void copyBufferToImage(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer);
 void copyImageToBuffer(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer);
 
 void drawLine(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, int end_x, int end_y);
-void drawLineBressenham(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, int end_x, int end_y);
+void drawLineBressenham(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, int end_x, int end_y, Color c);
+
+/*
+ * Helper functions for lines
+ */
+Point2D intersectionOfLines(float ro1, float teta1, float ro2, float teta2);
+bool isOnLine(int x, int y, float ro, float teta);
 
 #endif /* PROCESSING_H_ */

@@ -222,7 +222,7 @@ public class MainActivity extends Activity {
 				ips.add("Invert");
 				ips.add("Canny");
 				ips.add("Hough");
-				ips.add("Hough and Ransac");
+				ips.add("Ransac");
 				ips.add("Zebra crossing detection");
 
 				lv.setAdapter(new ArrayAdapter<String>(lv.getContext(),

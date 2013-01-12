@@ -2,6 +2,8 @@
 #include <math.h>
 #include <time.h>
 #include "queue"
+#include <vector>
+#include <stdlib.h>
 
 #include "processing.h"
 #include "heap.h"
@@ -14,6 +16,8 @@
 #define PI 3.14159265
 
 using namespace std;
+
+vector<houghLM> hough_lines;
 
 void optimizedCanny(AndroidBitmapInfo &info, void *pixels) {
 	time_t start,end;
@@ -875,10 +879,12 @@ void processingHough(AndroidBitmapInfo &info, void *pixels) {
 	if (k > nrMax) {
 		k = nrMax;
 	}
-	double x0 = 0;
-	double y0 = 0;
-	double x1 = 0;
-	double y1 = 0;
+	int x0 = 0;
+	int y0 = 0;
+	int x1 = 0;
+	int y1 = 0;
+
+	hough_lines.clear();
 
 	for (int i = 0; i < k; i++) {
 		current = popMaxFromHeap(&heap);
@@ -888,11 +894,80 @@ void processingHough(AndroidBitmapInfo &info, void *pixels) {
 		x1 = info.width;
 		y1 = (ro[i] - x1*cos(teta[i]*3.14/180.0))/sin(teta[i]*3.14/180.0);*/
 		x0 = 0;
-		y0 = current.ro/sin(current.teta*3.14/180.0);
-		x1 = info.width;
-		y1 = (current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0);
-		drawLineBressenham(info, pixels,x0,y0,x1,y1);
+		y0 = (int)(current.ro/sin(current.teta*3.14/180.0));
+		x1 = (int)(info.width);
+		y1 = (int)((current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0));
+		drawLineBressenham(info, pixels,x0,y0,x1,y1, Color::Red());
+
+		hough_lines.push_back(current);
 	}
+}
+
+
+void processingRansac(AndroidBitmapInfo &info, void* pixels) {
+	if(hough_lines.size() == 0) {
+		LOGE("Run Hough before running RANSAC");
+		return;
+	}
+
+	srand(time(NULL));
+
+	int intersections = 8;
+	int max_inter = 0;
+	LOGI("No intersection %d", max_inter);
+	int loops = 10;
+	vector<int> indices;
+	int x0,y0,x1,y1;
+
+	while(loops > 0) {
+		int i1 = rand() % hough_lines.size();
+		int i2 = rand() % hough_lines.size();
+
+		while(i2 == i1)
+			i2 = rand() % hough_lines.size();
+
+		indices.clear();
+
+		Point2D intersection  =intersectionOfLines(hough_lines[i1].ro, hough_lines[i1].teta, hough_lines[i2].ro, hough_lines[i2].teta);
+
+		for(size_t i=0;i<hough_lines.size();i++) {
+			if(i!=i1 && i!=i2) {
+				const houghLM& line = hough_lines[i];
+				if(isOnLine(intersection.x, intersection.y, line.ro, line.teta)) {
+					indices.push_back(i);
+				}
+			}
+		}
+		LOGI("cond %d", indices.size()>max_inter);
+		if((int)indices.size()>max_inter) {
+			max_inter = (int)indices.size();
+			LOGI("moar intersections! %d", max_inter);
+		}
+		LOGI("cond2 %d", (int)indices.size() >= intersections);
+		LOGI("var1 %d", (int)indices.size());
+		LOGI("var2 %d", intersections);
+		if((int)indices.size() >= intersections ) {
+			LOGI("Candidate found!");
+			break;
+		}
+
+		indices.clear();
+		loops--;
+	}
+	if(max_inter < intersections)
+		LOGI("No intersection %d", max_inter);
+	else {
+		LOGI("Intersections! %d", max_inter);
+		for(size_t i =0;i< indices.size(); i++) {
+			const houghLM &current = hough_lines[indices[i]];
+			x0 = 0;
+			y0 = current.ro/sin(current.teta*3.14/180.0);
+			x1 = info.width;
+			y1 = (current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0);
+			drawLineBressenham(info, pixels,x0,y0,x1,y1, Color::Green());
+		}
+	}
+	indices.clear();
 }
 
 void processingHough(AndroidBitmapInfo &info, uint8_t *pixels) {
@@ -1000,7 +1075,7 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixels) {
 		y0 = current.ro/sin(current.teta*3.14/180.0);
 		x1 = info.width;
 		y1 = (current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0);
-		drawLineBressenham(info, pixels,x0,y0,x1,y1);
+		drawLineBressenham(info, pixels,x0,y0,x1,y1, Color::Red());
 	}
 
 }
@@ -1073,7 +1148,7 @@ void drawLine(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, i
 	}
 }
 
-void drawLineBressenham(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, int end_x, int end_y) {
+void drawLineBressenham(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, int end_x, int end_y, Color c) {
 
 	int delta_x = end_x-start_x;
 	delta_x = (delta_x > 0) ? delta_x : -delta_x;
@@ -1085,16 +1160,16 @@ void drawLineBressenham(AndroidBitmapInfo &info, void *pixels, int start_x, int 
 	void* imageData;
 	rgba* current;
 	int current_error;
-	LOGI("%d %d %d %d",start_x, end_x,  start_y, end_y);
+	//LOGI("%d %d %d %d",start_x, end_x,  start_y, end_y);
 	do {
 
 
 		if (start_x < info.width && start_x >= 0 && start_y < info.height && start_y >= 0 ) {
 			imageData = (char*) pixels + start_x*sizeof(rgba) + start_y * info.stride;
 			current = (rgba *) imageData;
-			current->red = (uint8_t) 255;
-			current->green = (uint8_t) 0;
-			current->blue = (uint8_t) 0;
+			current->red = (uint8_t) c.r;
+			current->green = (uint8_t) c.g;
+			current->blue = (uint8_t) c.b;
 		}
 		if (start_x == end_x && start_y == end_y) {
 			break;
@@ -1185,7 +1260,7 @@ void copyBufferToImage(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer) {
  *
  * Hopefully casting to int will be ok.
  */
-Point2D intersectionOfLines(int ro1, int teta1, int ro2, int teta2) {
+Point2D intersectionOfLines(float ro1, float teta1, float ro2, float teta2) {
 	Point2D point;
 
 	point.x = (1.0 * ro1 * sin (teta2 * PI/180) - 1.0 * ro2 * sin(teta1* PI/180))/sin((teta2-teta1) * PI/180);
@@ -1199,6 +1274,6 @@ Point2D intersectionOfLines(int ro1, int teta1, int ro2, int teta2) {
  *
  * Multiplication by PI/180 necesary because sin and cos work with radians.
  */
-bool isOnLine(int x, int y, int ro, int teta) {
-	return (ro = x * cos(teta * PI/180) + y * sin (teta * PI/180));
+bool isOnLine(int x, int y, float ro, float teta) {
+	return (ro == x * cos(teta * PI/180) + y * sin (teta * PI/180));
 }
