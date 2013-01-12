@@ -2,3 +2,7 @@
 /bin
 /gen
 /obj
+/libs/armeabi
+/libs/armeabi/libdiblook.so
+/libs/armeabi/gdb.setup
+/libs/armeabi/gdbserver
