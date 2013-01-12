@@ -63,6 +63,9 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixels);
  * Helper functions for accessing pixels
  */
 queue<Point2D> bfs(void* pixels, queue<Point2D> q, int x, int y, int pixelWidth, int stride);
+
+queue<Point2D> bfs(int* pixels, queue<Point2D> q, int x, int y, int pixelWidth, int stride);
+
 void* getPixel(void* pixels,int dx, int dy, int stride, int width);
 
 /*

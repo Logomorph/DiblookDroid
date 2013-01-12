@@ -325,10 +325,10 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 	int index;
 
 	//general purpose reusables
-	uint8_t *array_one = new uint8_t[info.height * info.width];
-	uint8_t *array_two = new uint8_t[info.height * info.width];
-	uint8_t *array_three = new uint8_t[info.height * info.width];
-	uint8_t *array_four = new uint8_t[info.height * info.width];
+	int *array_one = new int[info.height * info.width];
+	int *array_two = new int[info.height * info.width];
+	int *array_three = new int[info.height * info.width];
+	int *array_four = new int[info.height * info.width];
 
 
 	double valuex, valuey;
@@ -895,6 +895,8 @@ void processingHough(AndroidBitmapInfo &info, void *pixels) {
 	}
 }
 
+
+
 void processingHough(AndroidBitmapInfo &info, uint8_t *pixels) {
 	int **H; /* Hough accumulator*/
 	int hmax;
@@ -1141,6 +1143,29 @@ queue<Point2D> bfs(void* pixels, queue<Point2D> q, int x, int y, int pixelWidth,
 	return q;
 }
 
+queue<Point2D> bfs(int* pixels, queue<Point2D> q, int x, int y, int pixelWidth, int stride) {
+	Point2D current = q.front();
+	q.pop();
+	Point2D neigh;
+
+	int index;
+	int pointValue;
+
+	for (int dx = -1; dx <= 1; dx++) {
+		for (int dy = -1; dy <= 1; dy++) {
+			index = current.y + dy * stride + current.x + dx;
+			pointValue = pixels[index];
+			if (pointValue == WEAK_EDGE) {
+				pixels[index] = STRONG_EDGE;
+				neigh.populate(current.x+dx, current.y+dy, pointValue);
+				q.push(neigh);
+			}
+		}
+	}
+
+	return q;
+}
+
 void* getPixel(void* pixels,int dx, int dy, int stride, int width) {
 	return (char*) pixels + dx * width + dy * stride;
 }
@@ -1200,5 +1225,5 @@ Point2D intersectionOfLines(int ro1, int teta1, int ro2, int teta2) {
  * Multiplication by PI/180 necesary because sin and cos work with radians.
  */
 bool isOnLine(int x, int y, int ro, int teta) {
-	return (ro = x * cos(teta * PI/180) + y * sin (teta * PI/180));
+	return (ro == x * cos(teta * PI/180) + y * sin (teta * PI/180));
 }

@@ -49,17 +49,17 @@ JNIEXPORT void JNICALL Java_com_awk_pics_MainActivity_processImage(JNIEnv * env,
 		processingHough(info, pixels);
 		break;
 	case Canny_Hough_Ransac:
-		drawLine(info, pixels, 0,0,102,100);
+		drawLine(info, pixels, 0,0,100,100);
+		intersectionOfLines(141,45, )
 		break;
 	case Zebra_Crossing:
 		//TODO add calls to canny, hough, ransac and check for color switches along detected lines
 		uint8_t* buffer = new uint8_t[info.width * info.height];
 		copyImageToBuffer(info, pixels,buffer);
 		optimizedCanny(info, buffer);
-		//processingHough(info, buffer);
+		processingHough(info, buffer);
 		copyBufferToImage(info,pixels,buffer);
 		break;
-
 	}
 
 	AndroidBitmap_unlockPixels(env, bitmap);
