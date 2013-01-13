@@ -1,11 +1,10 @@
 package com.awk.pics;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+
+
 
 import android.app.ActionBar;
 import android.app.Activity;
@@ -13,33 +12,18 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Color;
-import android.net.Uri;
-import android.opengl.EGLContext;
-import android.opengl.GLES10;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.provider.MediaStore.Images.Media;
 
-import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentActivity;
-import android.util.Log;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.View.OnTouchListener;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ListView;
-import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.AdapterView.OnItemClickListener;
 
@@ -192,11 +176,14 @@ public class MainActivity extends Activity {
 			}
 		});
 
+		final Activity act = this;
+		
 		final ImageButton effectsBtn = (ImageButton) menu.findItem(
 				R.id.effects_btn).getActionView();
 		effectsBtn.setBackgroundResource(R.drawable.effects);
 		effectsBtn.setScaleX(1.5f);
 		effectsBtn.setScaleY(1.5f);
+		
 		effectsBtn.setOnClickListener(new View.OnClickListener() {
 
 			@Override
@@ -238,32 +225,10 @@ public class MainActivity extends Activity {
 									Toast.LENGTH_SHORT).show();
 							return;
 						}
-						// TODO: if you add a new operation, add it here, too
-						switch (position) {
-						case 0:
-							alert.dismiss();
-							processImage(mImageBitmap, INVERT_PROCESSING);
-							break;
-						case 1:
-							alert.dismiss();
-							processImage(mImageBitmap, CANNY_PROCESSING);
-							break;
-						case 2:
-							alert.dismiss();
-							processImage(mImageBitmap, CANNY_HOUGH_PROCESSING);
-							break;
-						case 3:
-							alert.dismiss();
-							processImage(mImageBitmap, CANNY_HOUGH_RANSAC_PROCESSING);
-							break;
-						case 4:
-							alert.dismiss();
-							processImage(mImageBitmap, ZEBRA_CROSSING_PROCESSING);
-							break;
-						}
-						ImageView image = (ImageView) findViewById(R.id.imageView);
-						image.setImageBitmap(null);
-						image.setImageBitmap(mImageBitmap);
+
+						alert.dismiss();
+						new Worker(position,act);
+						//Toast.makeText(v.getContext(), "running", Toast.LENGTH_SHORT).show();
 					}
 				});
 			}
@@ -289,5 +254,50 @@ public class MainActivity extends Activity {
 		// bothered.
 		// my Nexus S has a max of 2048x2048
 		return new Vector2(2048, 2048);
+	}
+	
+	public class Worker implements Runnable {
+		private int op;
+		private Activity a;
+		public Worker(long operation, Activity activity) {
+			op = (int)operation;
+			a = activity;
+
+			Thread t = new Thread(this);
+			t.start();
+		}
+
+		@Override
+		public void run() {
+			// TODO: if you add a new operation, add it here, too
+			final long start = System.currentTimeMillis();
+			switch (op) {
+			case 0:
+				processImage(mImageBitmap, INVERT_PROCESSING);
+				break;
+			case 1:
+				processImage(mImageBitmap, CANNY_PROCESSING);
+				break;
+			case 2:
+				processImage(mImageBitmap, CANNY_HOUGH_PROCESSING);
+				break;
+			case 3:
+				processImage(mImageBitmap, CANNY_HOUGH_RANSAC_PROCESSING);
+				break;
+			case 4:
+				processImage(mImageBitmap, ZEBRA_CROSSING_PROCESSING);
+				break;
+			}
+			final long end = System.currentTimeMillis();
+			a.runOnUiThread(new Runnable() {
+				public void run() {	
+					ImageView image = (ImageView) findViewById(R.id.imageView);
+					image.setImageBitmap(null);
+					image.setImageBitmap(mImageBitmap);
+					Toast.makeText(a, "done in "+ (end - start)+"ms", Toast.LENGTH_SHORT).show();
+				}
+			});
+		}
+		
 	}
 }
