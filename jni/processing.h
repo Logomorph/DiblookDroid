@@ -19,6 +19,8 @@
 
 using namespace std;
 
+
+
 typedef struct {
 	uint8_t red;
 	uint8_t green;
@@ -64,18 +66,21 @@ struct Color {
 	static Color Green() {
 		return Color(0,255,0);
 	}
+
+	static Color Orange() {
+		return Color(255, 125,0);
+	}
 };
 
 void processingInvert(AndroidBitmapInfo &info,void *pixels);
-void processingCanny(AndroidBitmapInfo &info,void *pixels);
 
-void optimizedCanny(AndroidBitmapInfo &info,void *pixels);
 void optimizedCanny(AndroidBitmapInfo &info,uint8_t *pixels);
 
-void processingHough(AndroidBitmapInfo &info,void *pixels);
-void processingHough(AndroidBitmapInfo &info, uint8_t *pixels);
+void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer);
 
 void processingRansac(AndroidBitmapInfo &info, void* pixels);
+void processingRansacZebra(AndroidBitmapInfo &info, void* pixels);
+
 /*
  * Helper functions for accessing pixels
  */
@@ -93,6 +98,12 @@ void copyImageToBuffer(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer);
 
 void drawLine(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, int end_x, int end_y);
 void drawLineBressenham(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, int end_x, int end_y, Color c);
+void drawLineBressenham(AndroidBitmapInfo &info, uint8_t *pixels, int start_x, int start_y, int end_x, int end_y, Color c);
+
+void drawZebraEdge(AndroidBitmapInfo &info, void* pixels, int start_x, int start_y, int end_x, int end_y, Color c);
+
+void drawTestLines(AndroidBitmapInfo &info, void* pixels);
+void drawHoughLines(AndroidBitmapInfo &info, void* pixels);
 
 /*
  * Helper functions for lines

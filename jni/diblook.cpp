@@ -34,36 +34,42 @@ JNIEXPORT void JNICALL Java_com_awk_pics_MainActivity_processImage(JNIEnv * env,
 	/*if (operation == Invert) {
 		processingInvert(info, pixels);
 	}*/
-
+	uint8_t* buffer;
 	switch (operation) {
 	case Invert:
 		processingInvert(info, pixels);
 		break;
 	case Canny:
-		//processingCanny(info, pixels);
-		optimizedCanny(info, pixels);
+		buffer = new uint8_t[info.width * info.height];
+		copyImageToBuffer(info, pixels,buffer);
+		optimizedCanny(info, buffer);
+		copyBufferToImage(info,pixels,buffer);
 		break;
 	case Canny_Hough:
-		//drawLine(info, pixels, 0,0,400,400);
-		//optimizedCanny(info, pixels);
-		processingHough(info, pixels);
-		break;
-	case Canny_Hough_Ransac:
-<<<<<<< HEAD
-		drawLine(info, pixels, 0,0,100,100);
-		intersectionOfLines(141,45, )
-=======
-		//drawLine(info, pixels, 0,0,102,100);
-		processingRansac(info, pixels);
->>>>>>> a7eb886d0a4f2be0395857d4e038409f0d8c8544
-		break;
-	case Zebra_Crossing:
 		//TODO add calls to canny, hough, ransac and check for color switches along detected lines
-		uint8_t* buffer = new uint8_t[info.width * info.height];
+		buffer = new uint8_t[info.width * info.height];
 		copyImageToBuffer(info, pixels,buffer);
 		optimizedCanny(info, buffer);
 		processingHough(info, buffer);
-		copyBufferToImage(info,pixels,buffer);
+		drawHoughLines(info, pixels);
+		break;
+	case Canny_Hough_Ransac:
+		buffer = new uint8_t[info.width * info.height];
+		copyImageToBuffer(info, pixels,buffer);
+		optimizedCanny(info, buffer);
+		processingHough(info, buffer);
+		processingRansacZebra(info, pixels);
+		break;
+	case Zebra_Crossing:
+
+
+		//TODO add calls to canny, hough, ransac and check for color switches along detected lines
+		buffer = new uint8_t[info.width * info.height];
+		copyImageToBuffer(info, pixels,buffer);
+		optimizedCanny(info, buffer);
+		processingHough(info, buffer);
+		processingRansac(info, pixels);
+		//copyBufferToImage(info,pixels,buffer);
 		break;
 	}
 
