@@ -66,7 +66,9 @@ struct Color {
 	static Color Green() {
 		return Color(0,255,0);
 	}
-
+	static Color Blue() {
+		return Color(0,0,255);
+	}
 	static Color Orange() {
 		return Color(255, 125,0);
 	}
@@ -99,6 +101,7 @@ void copyImageToBuffer(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer);
 void drawLine(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, int end_x, int end_y);
 void drawLineBressenham(AndroidBitmapInfo &info, void *pixels, int start_x, int start_y, int end_x, int end_y, Color c);
 void drawLineBressenham(AndroidBitmapInfo &info, uint8_t *pixels, int start_x, int start_y, int end_x, int end_y, Color c);
+void drawZebraCrossingFrame(AndroidBitmapInfo &info, void* pixels);
 
 void drawZebraEdge(AndroidBitmapInfo &info, void* pixels, int start_x, int start_y, int end_x, int end_y, Color c);
 

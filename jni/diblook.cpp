@@ -69,6 +69,7 @@ JNIEXPORT void JNICALL Java_com_awk_pics_MainActivity_processImage(JNIEnv * env,
 		optimizedCanny(info, buffer);
 		processingHough(info, buffer);
 		processingRansac(info, pixels);
+		drawZebraCrossingFrame(info,pixels);
 		//copyBufferToImage(info,pixels,buffer);
 		break;
 	}

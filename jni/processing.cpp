@@ -19,6 +19,7 @@
 #define houghIncrement 1
 #define houghThreshold 30
 #define ransacThreshold 30
+#define zebraLines 5
 
 #define PI 3.14159265
 
@@ -103,7 +104,7 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 	 * array_two - orientation
 	 * array_three - maximas
 	 */
-	/*for(int i = 1; i < info.height-1; i++) {
+	for(int i = region_top; i < region_bottom-1; i++) {
 		for(int j = 1; j < info.width-1; j++) {
 
 			index = i*w+j;
@@ -135,58 +136,6 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 
 			} else if ((array_two[index] >= pi38 && array_two[index] <= pi58) ||
 				(array_two[index] >= -pi58 && array_two[index] <= -pi38)) {
-
-					if (array_one[index] >= array_one[(i+1)*w+j] && array_one[index] >= array_one[(i-1)*w+j]) {
-						array_three[index] = array_one[index];
-					} else {
-						array_three[index] = 0;
-					}
-
-			} else {
-				if (array_one[index] >= array_one[(i+1)*w+j-1] && array_one[index] >= array_one[(i-1)*w+j+1]) {
-					array_three[index] = array_one[index];
-				} else {
-					array_three[index] = 0;
-				}
-			}
-
-			//add to histogram
-			histogram[(int)array_three[index]]++;
-
-		}
-	}*/
-	for(int i = region_top; i < region_bottom-1; i++) {
-		for(int j = 1; j < info.width-1; j++) {
-
-			index = i*w+j;
-
-			//adaptive thresholding
-			if (array_one[index] == 0) {
-				nrG0++;
-			}
-
-			//compute maxima of current point
-			if ((array_two[index] >= -pi8 && array_two[index] <= pi8) ||
-				(array_two[index] >= pi - pi8 && array_two[index] <= -pi) ||
-				(array_two[index] >= -pi && array_two[index] <= -pi + pi8)) {
-
-				if (array_one[index] >= array_one[index+1] && array_one[index] >= array_one[index-1]) {
-					array_three[index] = array_one[index];
-				} else {
-					array_three[index] = 0;
-				}
-
-			} else if ((array_two[index] >= pi8 && array_two[i*w+j] <= pi8 + pi4) ||
-				(array_two[index] >= -pi + pi8 && array_two[index] <= -pi + pi8 + pi4)) {
-
-					if (array_one[index] >= array_one[(i+1)*w+j+1] && array_one[index] >= array_one[(i-1)*w+j-1]) {
-						array_three[index] = array_one[index];
-					} else {
-						array_three[index] = 0;
-					}
-
-			} else if ((array_two[index] >= pi2 - pi8 && array_two[index] <= pi2 + pi8) ||
-				(array_two[index] >= -pi2 - pi8 && array_two[index] <= -pi2 + pi8)) {
 
 					if (array_one[index] >= array_one[(i+1)*w+j] && array_one[index] >= array_one[(i-1)*w+j]) {
 						array_three[index] = array_one[index];
@@ -351,7 +300,7 @@ void processingRansac(AndroidBitmapInfo &info, void* pixels) {
 		x1 = info.width;
 		y1 = (current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0);
 		//LOGI("Attempting to draw %d %d %d %d", x0, y0, x1,y1);
-		drawZebraEdge(info, pixels,x0,y0,x1,y1, Color::Green());
+		drawZebraEdge(info, pixels,x0,y0,x1,y1, Color::Blue());
 		//drawLineBressenham(info, pixels,x0,y0,x1,y1, Color::Green());
 	}
 
@@ -361,77 +310,74 @@ void processingRansac(AndroidBitmapInfo &info, void* pixels) {
 
 void processingRansacZebra(AndroidBitmapInfo &info, void* pixels) {
 	if(hough_lines.size() == 0) {
-			LOGE("Run Hough before running RANSAC");
-			return;
-		}
-
-
-		//drawLines(info, pixels, hough_lines);
-
-		srand(time(NULL));
-
-		int max_inter = 0;
-		LOGI("No intersection %d", max_inter);
-		int loops = 50;
-		vector<int> indices;
-		vector<int> max_indices;
-		int x0,y0,x1,y1;
-
-		while(loops > 0) {
-			int i1 = rand() % hough_lines.size();
-			int i2 = rand() % hough_lines.size();
-
-			while(i2 == i1)
-				i2 = rand() % hough_lines.size();
-
-			indices.clear();
-
-			Point2D intersection = intersectionOfLines(hough_lines[i1].ro, hough_lines[i1].teta, hough_lines[i2].ro, hough_lines[i2].teta);
-
-			for(size_t i=0;i<hough_lines.size();i++) {
-
-				const houghLM& line = hough_lines[i];
-				if(isOnLine(intersection.x, intersection.y, line.ro, line.teta)) {
-					indices.push_back(i);
-				}
-
-			}
-
-			if((int)indices.size()>max_inter) {
-				max_inter = (int)indices.size();
-				max_indices.clear();
-				max_indices = indices;
-				LOGI("moar intersections! %d", max_inter);
-
-			}
-
-			if((int)max_indices.size() >= ransacThreshold ) {
-				LOGI("Candidate found!");
-				break;
-			}
-
-			indices.clear();
-			loops--;
-		}
-
-		LOGI("Intersections! %d", max_inter);
-		for(size_t i =0;i< max_indices.size(); i++) {
-			houghLM &current = hough_lines[max_indices[i]];
-			x0 = 0;
-			y0 = current.ro/sin(current.teta*3.14/180.0);
-			x1 = info.width;
-			y1 = (current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0);
-			//LOGI("Attempting to draw %d %d %d %d", x0, y0, x1,y1);
-			//drawZebraEdge(info, pixels,x0,y0,x1,y1, Color::Green());
-			drawLineBressenham(info, pixels,x0,y0,x1,y1, Color::Green());
-		}
-
-		//drawLines(info, pixels, hough_lines);
-		indices.clear();
+		LOGE("Run Hough before running RANSAC");
+		return;
 	}
+	//drawLines(info, pixels, hough_lines);
+
+	srand(time(NULL));
+
+	int max_inter = 0;
+	LOGI("No intersection %d", max_inter);
+	int loops = 50;
+	vector<int> indices;
+	vector<int> max_indices;
+	int x0,y0,x1,y1,i1,i2;
+
+	while(loops > 0) {
+		i1 = rand() % hough_lines.size();
+		i2 = rand() % hough_lines.size();
+
+		while(i2 == i1)
+			i2 = rand() % hough_lines.size();
+
+		indices.clear();
+
+		Point2D intersection = intersectionOfLines(hough_lines[i1].ro, hough_lines[i1].teta, hough_lines[i2].ro, hough_lines[i2].teta);
+
+		for(size_t i=0;i<hough_lines.size();i++) {
+
+			const houghLM& line = hough_lines[i];
+			if(isOnLine(intersection.x, intersection.y, line.ro, line.teta)) {
+				indices.push_back(i);
+			}
+
+		}
+
+		if((int)indices.size()>max_inter) {
+			max_inter = (int)indices.size();
+			max_indices.clear();
+			max_indices = indices;
+			LOGI("More intersections! %d", max_inter);
+
+		}
+
+		if((int)max_indices.size() >= ransacThreshold ) {
+			LOGI("Candidate found!");
+			break;
+		}
+
+		indices.clear();
+		loops--;
+	}
+
+	LOGI("Intersections! %d", max_inter);
+	for(size_t i =0;i< max_indices.size(); i++) {
+		houghLM &current = hough_lines[max_indices[i]];
+		x0 = 0;
+		y0 = current.ro/sin(current.teta*3.14/180.0);
+		x1 = info.width;
+		y1 = (current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0);
+		//LOGI("Attempting to draw %d %d %d %d", x0, y0, x1,y1);
+		//drawZebraEdge(info, pixels,x0,y0,x1,y1, Color::Green());
+		drawLineBressenham(info, pixels,x0,y0,x1,y1, Color::Green());
+	}
+
+	indices.clear();
+}
 void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 
-
+	LOGI("Start Hough");
 	float **H; /* Hough accumulator*/
 	int hmax;
 	int diag;/* Diagonal of image */
@@ -534,10 +480,6 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 	if (k > nrMax) {
 		k = nrMax;
 	}
-	double x0 = 0;
-	double y0 = 0;
-	double x1 = 0;
-	double y1 = 0;
 
 	hough_lines.clear();
 
@@ -546,6 +488,8 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 
 		hough_lines.push_back(current);
 	}
+
+	LOGI("End Hough");
 }
 
 void drawLines(AndroidBitmapInfo &info, void* pixels, vector<houghLM> lines) {
@@ -600,14 +544,15 @@ void drawZebraEdge(AndroidBitmapInfo &info, void* pixels, int start_x, int start
 			imageData = (char*) imageData - sizeof(rgba);
 			left2 = (rgba *) imageData;
 
-			//if (abs(left1->red -left2->red) < 10 && abs(right1->red -right2->red) < 10 )  {
+			//if (abs(left1->red -left2->red) < 30 && abs(right1->red -right2->red) < 30 )  {
 
-			if ((left2->red > 100 || right2->red > 100 ) &&   abs(left2->red - right2->red) > 50 ) {
+			//if ((left2->red > 120 || right2->red > 120 ) &&   abs(left2->red - right2->red) > 50 ) {
+			if ((left2->red > 100 || right2->red > 100 ) &&   abs(left2->red - right2->red) > 30 ) {
 				current->red = (uint8_t) c.r;
 				current->green = (uint8_t) c.g;
 				current->blue = (uint8_t) c.b;
 
-				//	}
+				}
 			} else {
 				if (showRansacLines) {
 					current->red = (uint8_t) 0;
@@ -615,7 +560,7 @@ void drawZebraEdge(AndroidBitmapInfo &info, void* pixels, int start_x, int start
 					current->blue = (uint8_t) 0;
 				}
 			}
-		}
+		//}
 		if (start_x == end_x && start_y == end_y) {
 			break;
 		}
@@ -722,6 +667,43 @@ void copyImageToBuffer(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer) {
 		}
 		lpSrc = (char *) lpSrc + info.stride;
 	}
+}
+
+void drawZebraCrossingFrame(AndroidBitmapInfo &info, void* pixels) {
+	void* lpSrc = pixels;
+	rgba * line;
+	int count = 0;
+	int topY = -1;
+	int bottomY = -1;
+
+	for (int y = 0; y < info.height	; y++) {
+		line = (rgba *) lpSrc;
+		count = 0;
+		for (int x = 0; x < info.width; x++) {
+			if ((line[x].blue == 255 && line[x].red == 0 && line[x].green == 0 )
+				&& !(line[x-1].blue == 255 && line[x-1].red == 0 && line[x-1].green == 0 )
+				&& !(line[x+1].blue == 255 && line[x+1].red == 0 && line[x+1].green == 0 )
+			){
+				count++;
+			}
+			//line[x].red = 255;
+		}
+
+		if (count >= zebraLines) {
+			if (topY < 0) {
+				topY = y;
+			} else {
+				bottomY = y;
+			}
+		}
+
+		lpSrc = (char *) lpSrc + info.stride;
+	}
+
+	LOGI("%d %d",topY ,bottomY);
+	drawLineBressenham(info, pixels,0, topY - region_top, info.width - 1, topY- region_top, Color::Red());
+	drawLineBressenham(info, pixels,0, bottomY- region_top, info.width - 1, bottomY- region_top, Color::Red());
+
 }
 
 void copyBufferToImage(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer) {
