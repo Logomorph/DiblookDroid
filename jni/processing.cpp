@@ -17,7 +17,7 @@
 
 #define houghDegreeNumber 360
 #define houghIncrement 1
-#define houghThreshold 30
+#define houghThreshold 10
 #define ransacThreshold 30
 #define zebraLines 5
 
@@ -294,7 +294,7 @@ void processingRansac(AndroidBitmapInfo &info, void* pixels) {
 
 	LOGI("Intersections! %d", max_inter);
 	for(size_t i =0;i< max_indices.size(); i++) {
-		houghLM &current = hough_lines[max_indices[i]];
+		const houghLM &current = hough_lines[max_indices[i]];
 		x0 = 0;
 		y0 = current.ro/sin(current.teta*3.14/180.0);
 		x1 = info.width;
@@ -419,7 +419,7 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 						} else {
 							H[rho][teta]+=1;
 						}*/
-						H[rho][teta]+=1 + cos(angle);
+						H[rho][teta]+= cos(angle);
 						if (H[rho][teta] > hmax) {
 							hmax = H[rho][teta];
 						}
@@ -431,7 +431,7 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 	}
 
 	/* Non maxima suppression */
-	int n = 11; //5, 7
+	int n = 5; //5, 7
 	int m = (n-1)/2;
 
 	int houghSz = diag * houghDegreeNumber;
@@ -547,7 +547,10 @@ void drawZebraEdge(AndroidBitmapInfo &info, void* pixels, int start_x, int start
 			//if (abs(left1->red -left2->red) < 30 && abs(right1->red -right2->red) < 30 )  {
 
 			//if ((left2->red > 120 || right2->red > 120 ) &&   abs(left2->red - right2->red) > 50 ) {
-			if ((left2->red > 100 || right2->red > 100 ) &&   abs(left2->red - right2->red) > 30 ) {
+			//if ((left2->red > 100 || right2->red > 100 ) &&   abs(left2->red - right2->red) > 30 ) {
+
+			if (((left2->red > 120 && (left2->red - right2->red > 30 ))) ||
+					((right2->red > 120 && (right2->red - left2->red > 30 )))) {
 				current->red = (uint8_t) c.r;
 				current->green = (uint8_t) c.g;
 				current->blue = (uint8_t) c.b;
@@ -673,32 +676,52 @@ void drawZebraCrossingFrame(AndroidBitmapInfo &info, void* pixels) {
 	void* lpSrc = pixels;
 	rgba * line;
 	int count = 0;
+	int mean = 0;
+	int startingMean = 0;
+	int zebraMean = 0;
+	int lastLineMean = 0;
+
 	int topY = -1;
 	int bottomY = -1;
+	int lineCount = 0;
+	lpSrc = (char *) lpSrc + info.stride * (info.height-5);
 
-	for (int y = 0; y < info.height	; y++) {
+	for (int y = info.height - 5; y >= region_top; y--) {
 		line = (rgba *) lpSrc;
 		count = 0;
 		for (int x = 0; x < info.width; x++) {
-			if ((line[x].blue == 255 && line[x].red == 0 && line[x].green == 0 )
-				&& !(line[x-1].blue == 255 && line[x-1].red == 0 && line[x-1].green == 0 )
-				&& !(line[x+1].blue == 255 && line[x+1].red == 0 && line[x+1].green == 0 )
-			){
-				count++;
-			}
-			//line[x].red = 255;
+			count += line[x].red;
+		}
+		if (lineCount > 2) {
+			lastLineMean = mean;
+			lineCount = 0;
+		} else {
+			lineCount++;
 		}
 
-		if (count >= zebraLines) {
-			if (topY < 0) {
-				topY = y;
-			} else {
+		mean = count / info.width;
+		if (startingMean == 0) {
+			//this should happen on the first line
+			startingMean = mean;
+			lastLineMean = mean;
+			LOGI("First Line");
+		} else if (bottomY < 0 ) {
+			if (abs(mean - lastLineMean) > 30) {
 				bottomY = y;
+				zebraMean = mean;
+				lastLineMean = mean;
 			}
+			LOGI("Other");
+		} else if (abs(mean - lastLineMean) > 20 ) {
+			LOGI("Done");
+			topY = y;
+			break;
 		}
+		LOGI("Mean on line %d is %d", y, mean);
 
-		lpSrc = (char *) lpSrc + info.stride;
+		lpSrc = (char *) lpSrc - info.stride;
 	}
+
 
 	LOGI("%d %d",topY ,bottomY);
 	drawLineBressenham(info, pixels,0, topY - region_top, info.width - 1, topY- region_top, Color::Red());

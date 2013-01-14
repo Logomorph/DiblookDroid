@@ -17,7 +17,7 @@
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
-        android:theme="@style/AppTheme" android:debuggable="true" android:hardwareAccelerated="true" android:largeHeap="false">
+        android:theme="@style/AppTheme" android:debuggable="false" android:hardwareAccelerated="true" android:largeHeap="false">
         <activity
             android:name="com.awk.pics.MainActivity"
             android:label="@string/app_name" 
