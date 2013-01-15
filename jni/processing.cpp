@@ -17,8 +17,8 @@
 
 #define houghDegreeNumber 360
 #define houghIncrement 1
-#define houghThreshold 10
-#define ransacThreshold 30
+#define houghThreshold 30
+#define ransacThreshold 40
 #define zebraLines 5
 
 #define PI 3.14159265
@@ -419,7 +419,8 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 						} else {
 							H[rho][teta]+=1;
 						}*/
-						H[rho][teta]+= cos(angle);
+						//H[rho][teta]+= cos(angle);
+						H[rho][teta]++;
 						if (H[rho][teta] > hmax) {
 							hmax = H[rho][teta];
 						}
@@ -449,7 +450,7 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 	houghLM current;
 
 	for(int i = m; i < diag - m; i++) {
-		for(int j = m; j < houghDegreeNumber - m; j++) {
+		for(int j = m; j < houghDegreeNumber - m; j+=2) {
 			//check for a threshold
 			if (H[i][j] > houghThreshold) {
 				max = true;
@@ -475,11 +476,11 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 
 	LOGI("Hough found %d local maximas.", nrMax);
 
-	int k = 50; /* Number of lines to display */
-	//k = nrMax;
-	if (k > nrMax) {
+	int k = 0; /* Number of lines to display */
+	///k = nrMax;
+	//if (k > nrMax) {
 		k = nrMax;
-	}
+	//}
 
 	hough_lines.clear();
 
