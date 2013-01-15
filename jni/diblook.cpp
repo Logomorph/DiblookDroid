@@ -4,6 +4,7 @@
 //TODO add new operation here as well
 
 extern "C" {
+
 enum Operations {
 	Invert = 0,
 	Canny = 1,
@@ -11,6 +12,12 @@ enum Operations {
 	Canny_Hough_Ransac = 3,
 	Zebra_Crossing = 4
 };
+
+JNIEXPORT void JNICALL Java_com_awk_pics_MainActivity_fillCosSinTables(JNIEnv * env,
+		jobject obj) {
+	LOGI("Initializing sin and cos LUTs");
+	fillLuts();
+}
 JNIEXPORT void JNICALL Java_com_awk_pics_MainActivity_processImage(JNIEnv * env,
 		jobject obj, jobject bitmap, jlong operation) {
 	AndroidBitmapInfo info;

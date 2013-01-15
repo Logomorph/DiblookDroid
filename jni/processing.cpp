@@ -36,6 +36,16 @@ int region_bottom;
 
 void drawLines(AndroidBitmapInfo &info, void* pixels, vector<houghLM> lines);
 
+double sinT[360];
+double cosT[360];
+
+void fillLuts() {
+	for(int i=0;i<360;i++) {
+			float angle = i*3.14/180.0;
+			sinT[i] = sin(angle);
+			cosT[i] = cos(angle);
+		}
+}
 
 /*
  * Use this now
@@ -296,9 +306,9 @@ void processingRansac(AndroidBitmapInfo &info, void* pixels) {
 	for(size_t i =0;i< max_indices.size(); i++) {
 		const houghLM &current = hough_lines[max_indices[i]];
 		x0 = 0;
-		y0 = current.ro/sin(current.teta*3.14/180.0);
+		y0 = current.ro/sinT[(int)current.teta];
 		x1 = info.width;
-		y1 = (current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0);
+		y1 = (current.ro - x1*cosT[(int)current.teta])/sinT[(int)current.teta];
 		//LOGI("Attempting to draw %d %d %d %d", x0, y0, x1,y1);
 		drawZebraEdge(info, pixels,x0,y0,x1,y1, Color::Blue());
 		//drawLineBressenham(info, pixels,x0,y0,x1,y1, Color::Green());
@@ -365,9 +375,9 @@ void processingRansacZebra(AndroidBitmapInfo &info, void* pixels) {
 	for(size_t i =0;i< max_indices.size(); i++) {
 		houghLM &current = hough_lines[max_indices[i]];
 		x0 = 0;
-		y0 = current.ro/sin(current.teta*3.14/180.0);
+		y0 = current.ro/sinT[(int)current.teta];
 		x1 = info.width;
-		y1 = (current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0);
+		y1 = (current.ro - x1*cosT[(int)current.teta])/sinT[(int)current.teta];
 		//LOGI("Attempting to draw %d %d %d %d", x0, y0, x1,y1);
 		//drawZebraEdge(info, pixels,x0,y0,x1,y1, Color::Green());
 		drawLineBressenham(info, pixels,x0,y0,x1,y1, Color::Green());
@@ -411,15 +421,16 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 			index = i * info.width + j;
 			if(pixelsBuffer[index] > 0) {
 				for(int teta = 0; teta < houghDegreeNumber; teta+=houghIncrement) {
-					angle = (teta*3.14)/180.0;
-					rho = j*cos(angle) + (i-region_top) *sin(angle);
+					angle = (teta);
+					// LOGI("cos %f",cosT[(int)angle]);
+					rho = j*cosT[(int)angle] + (i-region_top) *sinT[(int)angle];
 					if (rho >= 0) {
 						/*if (teta < 45 || teta > 315) {
 							H[rho][teta]+=1 + cos(angle);
 						} else {
 							H[rho][teta]+=1;
 						}*/
-						H[rho][teta]+= cos(angle);
+						H[rho][teta]+= cosT[(int)angle];
 						if (H[rho][teta] > hmax) {
 							hmax = H[rho][teta];
 						}
@@ -499,9 +510,9 @@ void drawLines(AndroidBitmapInfo &info, void* pixels, vector<houghLM> lines) {
 	for (int i = 0; i < hough_lines.size(); i++) {
 		current = lines.at(i);
 		x0 = 0;
-		y0 = current.ro/sin(current.teta*3.14/180.0);
+		y0 = current.ro/sinT[(int)current.teta];
 		x1 = info.width;
-		y1 = (current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0);
+		y1 = (current.ro - x1*cosT[(int)current.teta])/sinT[(int)current.teta];
 		drawLineBressenham(info, pixels ,x0,y0,x1,y1, Color::Red());
 	}
 }
@@ -759,8 +770,8 @@ void copyBufferToImage(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer) {
 Point2D intersectionOfLines(float ro1, float teta1, float ro2, float teta2) {
 	Point2D point;
 
-	point.x = (1.0 * ro1 * sin (teta2 * PI/180) - 1.0 * ro2 * sin(teta1* PI/180))/sin((teta2-teta1) * PI/180);
-	point.y = (1.0 * ro1 * cos (teta2 * PI/180) - 1.0 * ro2 * cos(teta1* PI/180))/sin((teta1-teta2) * PI/180);
+	point.x = (1.0 * ro1 * sinT [(int)teta2] - 1.0 * ro2 * sinT[(int)teta1])/sinT[(int)(teta2-teta1)];
+	point.y = (1.0 * ro1 * cosT [(int)teta2] - 1.0 * ro2 * cosT[(int)teta1])/sinT[(int)(teta1-teta2)];
 
 	return point;
 }
@@ -772,7 +783,7 @@ Point2D intersectionOfLines(float ro1, float teta1, float ro2, float teta2) {
  */
 
 bool isOnLine(int x, int y, float ro, float teta) {
-	float buffer = x * cos(teta * PI/180) + y * sin (teta * PI/180);
+	float buffer = x * cosT[(int)teta] + y * sinT [(int)teta];
 	return (abs((long) (buffer - ro)) >= 0 && abs((long)(buffer - ro)) <= 5);
 	//return (ro == buffer)
 }
