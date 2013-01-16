@@ -8,24 +8,17 @@
 
 #include "processing.h"
 #include "heap.h"
-#include <pthread.h>
-#include "helpers.h"
 
 #define kernelSize 5
 #define p 0.1
 #define WEAK_EDGE 128
 #define STRONG_EDGE 255
 
-#define SHOULD_MULTITHREAD_MO // comment this to stop multithreading
-//#define QUAD_CORE_MO // if this is commented, runs on 2 threads. otherwise 4
-#define SHOULD_MULTITHREAD_MS // comment this to stop multithreading
-//#define QUAD_CORE_MS // if this is commented, runs on 2 threads. otherwise 4
-
 
 #define houghDegreeNumber 360
 #define houghIncrement 1
-#define houghThreshold 30
-#define ransacThreshold 40
+#define houghThreshold 8
+#define ransacThreshold 30
 #define zebraLines 5
 
 #define PI 3.14159265
@@ -33,6 +26,9 @@
 using namespace std;
 
 bool showRansacLines = false;
+
+int topY = -1;
+int bottomY = -1;
 
 //collection of the hough lines
 vector<houghLM> hough_lines;
@@ -43,125 +39,7 @@ int region_bottom;
 
 void drawLines(AndroidBitmapInfo &info, void* pixels, vector<houghLM> lines);
 
-double sinT[360];
-double cosT[360];
 
-void fillLuts() {
-	for(int i=0;i<360;i++) {
-			float angle = i*3.14/180.0;
-			sinT[i] = sin(angle);
-			cosT[i] = cos(angle);
-		}
-}
-
-int *array_one;
-int *array_two;
-int *array_three;
-int *array_four;
-
-double pi = 3.1415f;
-double pi8 = pi/8.0;
-double pi4 = pi/4.0;
-double pi2 = pi/2.0;
-double pi78 = pi - pi8;
-double pi38 = pi4 + pi8;
-double pi58 = pi - pi38;
-
-void *mag_orient_function( void *ptr ) {
-	ImageRegion *img = (ImageRegion*) ptr;
-	double valuex, valuey;
-	uint8_t *image = img->image;
-	int w = img->iW;
-	int index;
-	double value = 4 * 1.41f;
-
-	for(int i = img->top; i < img->bottom; i++) {
-
-			for(int j = img->left; j < img->right; j++) {
-				index = i*w+j;
-
-				valuex = 2 * (image[index+1] - image[index-1]) -
-							  image[index-w-1] - image[index+w-1]
-							  + image[index-w+1] + image[index+w+1];
-
-				valuey =  2 * (image[index+w] - image[index-w]) -
-						  image[index-w-1] - image[index-w+1]
-						  + image[index+w-1] + image[index+w+1];
-
-				array_one[index] = sqrt(valuex*valuex + valuey*valuey)/value;
-				array_two[index] = atan2(valuey, valuex);
-
-			}
-		}
-}
-
-pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
-void *max_sup_function(void *ptr) {
-	ImageRegion *img = (ImageRegion*) ptr;
-	int w = img->iW;
-	int nrG0 = 0;
-	int index;
-	int *histogram  = new int[256]();
-	memset(histogram, 0, 256 * sizeof(int));
-
-	for(int i = img->top; i < img->bottom; i++) {
-		for(int j = img->left; j < img->right; j++) {
-
-			index = i*w+j;
-
-			//adaptive thresholding
-			if (array_one[index] == 0) {
-				nrG0++;
-			}
-
-			//compute maxima of current point
-			if ((array_two[index] >= -pi8 && array_two[index] <= pi8) ||
-				(array_two[index] >= pi78 && array_two[index] <= -pi) ||
-				(array_two[index] >= -pi && array_two[index] <= -pi78)) {
-
-				if (array_one[index] >= array_one[index+1] && array_one[index] >= array_one[index-1]) {
-					array_three[index] = array_one[index];
-				} else {
-					array_three[index] = 0;
-				}
-
-			} else if ((array_two[index] >= pi8 && array_two[i*w+j] <= pi38) ||
-				(array_two[index] >= -pi78 && array_two[index] <= -pi58)) {
-
-					if (array_one[index] >= array_one[(i+1)*w+j+1] && array_one[index] >= array_one[(i-1)*w+j-1]) {
-						array_three[index] = array_one[index];
-					} else {
-						array_three[index] = 0;
-					}
-
-			} else if ((array_two[index] >= pi38 && array_two[index] <= pi58) ||
-				(array_two[index] >= -pi58 && array_two[index] <= -pi38)) {
-
-					if (array_one[index] >= array_one[(i+1)*w+j] && array_one[index] >= array_one[(i-1)*w+j]) {
-						array_three[index] = array_one[index];
-					} else {
-						array_three[index] = 0;
-					}
-
-			} else {
-				if (array_one[index] >= array_one[(i+1)*w+j-1] && array_one[index] >= array_one[(i-1)*w+j+1]) {
-					array_three[index] = array_one[index];
-				} else {
-					array_three[index] = 0;
-				}
-			}
-
-			//add to histogram
-			//pthread_mutex_lock( &mutex1 );
-			histogram[(int)array_three[index]]++;
-			//pthread_mutex_unlock( &mutex1 );
-
-		}
-	}
-
-	return (void*) histogram;
-	//pthread_exit(histogram);
-}
 /*
  * Use this now
  */
@@ -174,10 +52,10 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 	int index;
 
 	//general purpose reusables
-	array_one = new int[info.height * info.width];
-	array_two = new int[info.height * info.width];
-	array_three = new int[info.height * info.width];
-	array_four = new int[info.height * info.width];
+	int *array_one = new int[info.height * info.width];
+	int *array_two = new int[info.height * info.width];
+	int *array_three = new int[info.height * info.width];
+	int *array_four = new int[info.height * info.width];
 
 	region_top = info.height / 2;
 	region_bottom = info.height - 5;
@@ -188,53 +66,6 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 	//store this so we don't need to compute it each time
 	value = 4 * sqrt(2.0);
 
-#ifdef SHOULD_MULTITHREAD_MO
-
-#ifdef QUAD_CORE_MO
-	{
-	pthread_t t1,t2,t3,t4;
-
-	int ret1,ret2,ret3,ret4;
-	ImageRegion *imgR1 = new ImageRegion(image, w, 0, 1, info.width/2, region_top, region_bottom/2);
-	ImageRegion *imgR2 = new ImageRegion(image, w, 0, info.width/2 + 1, info.width-1, region_top, region_bottom/2);
-
-	ImageRegion *imgR3 = new ImageRegion(image, w, 0, 1, info.width/2, region_bottom/2+1, region_bottom-1);
-	ImageRegion *imgR4 = new ImageRegion(image, w, 0, info.width/2 + 1, info.width-1, region_bottom/2+1, region_bottom-1);
-
-	ret1 = pthread_create( &t1, NULL, mag_orient_function, (void*)imgR1);
-	ret2 = pthread_create( &t2, NULL, mag_orient_function, (void*)imgR2);
-	ret3 = pthread_create( &t3, NULL, mag_orient_function, (void*)imgR3);
-	ret4 = pthread_create( &t4, NULL, mag_orient_function, (void*)imgR4);
-
-	pthread_join( t1, NULL);
-	pthread_join( t2, NULL);
-	pthread_join( t3, NULL);
-	pthread_join( t4, NULL);
-
-	delete imgR1;
-	delete imgR2;
-	delete imgR3;
-	delete imgR4;
-	}
-#else
-	{
-	pthread_t t1,t2;
-
-	int ret1,ret2;
-	ImageRegion *imgR1 = new ImageRegion(image, w, 0, 1, info.width/2, region_top, region_bottom-1);
-	ImageRegion *imgR2 = new ImageRegion(image, w, 0, info.width/2 + 1, info.width-1, region_top, region_bottom-1);
-	ret1 = pthread_create( &t1, NULL, mag_orient_function, (void*)imgR1);
-	ret2 = pthread_create( &t2, NULL, mag_orient_function, (void*)imgR2);
-
-	pthread_join( t1, NULL);
-	pthread_join( t2, NULL);
-
-	delete imgR1;
-	delete imgR2;
-	}
-#endif
-
-#else
 	for(int i = region_top; i < region_bottom - 1; i++) {
 
 		for(int j = 1; j < info.width-1; j++) {
@@ -253,13 +84,19 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 
 		}
 	}
-#endif
 
 	LOGI("Start non-maxima suppression");
+	double pi = 4.0*atan(1.0);
 
 	/*
 	 * Perform non maxima supression
 	 */
+	double pi8 = pi/8.0;
+	double pi4 = pi/4.0;
+	double pi2 = pi/2.0;
+	double pi78 = pi - pi8;
+	double pi38 = pi4 + pi8;
+	double pi58 = pi - pi38;
 
 	int nrG0 = 0;	//used for adaptive thresholding
 
@@ -270,69 +107,6 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 	 * array_two - orientation
 	 * array_three - maximas
 	 */
-#ifdef SHOULD_MULTITHREAD_MS
-#ifdef QUAD_CORE_MS
-	{
-	pthread_t t1,t2,t3,t4;
-
-	int ret1,ret2,ret3,ret4;
-	ImageRegion *imgR1 = new ImageRegion(image, w, 0, 1, info.width/2, region_top, region_bottom/2);
-	ImageRegion *imgR2 = new ImageRegion(image, w, 0, info.width/2 + 1, info.width-1, region_top, region_bottom/2);
-
-	ImageRegion *imgR3 = new ImageRegion(image, w, 0, 1, info.width/2, region_bottom/2+1, region_bottom-1);
-	ImageRegion *imgR4 = new ImageRegion(image, w, 0, info.width/2 + 1, info.width-1, region_bottom/2+1, region_bottom-1);
-
-	ret1 = pthread_create( &t1, NULL, max_sup_function, (void*)imgR1);
-	ret2 = pthread_create( &t2, NULL, max_sup_function, (void*)imgR2);
-	ret3 = pthread_create( &t3, NULL, max_sup_function, (void*)imgR3);
-	ret4 = pthread_create( &t4, NULL, max_sup_function, (void*)imgR4);
-
-	void  *r1, *r2, *r3, *r4;
-	pthread_join( t1, &r1);
-	pthread_join( t2, &r2);
-	pthread_join( t3, &r3);
-	pthread_join( t4, &r4);
-
-	//LOGI("Combining histograms");
-	int *h1 = (int *)r1;
-	int *h2 = (int *)r2;
-	int *h3 = (int *)r3;
-	int *h4 = (int *)r4;
-	//LOGI("Looping histograms %d %d",h1[0], h2[0]);
-	for(int i=0;i<256;i++)
-		histogram[i] = h1[i]+h2[i]+h3[i]+h4[i];
-
-	delete imgR1;
-	delete imgR2;
-	delete imgR3;
-	delete imgR4;
-	}
-#else
-	{
-	pthread_t t1,t2;
-
-	int ret1,ret2;
-	ImageRegion *imgR1 = new ImageRegion(image, w, 0, 1, info.width/2, region_top, region_bottom-1);
-	ImageRegion *imgR2 = new ImageRegion(image, w, 0, info.width/2 + 1, info.width-1, region_top, region_bottom-1);
-	ret1 = pthread_create( &t1, NULL, max_sup_function, (void*)imgR1);
-	ret2 = pthread_create( &t2, NULL, max_sup_function, (void*)imgR2);
-
-	void  *r1, *r2;
-	pthread_join( t1, &r1);
-	pthread_join( t2, &r2);
-
-	//LOGI("Combining histograms");
-	int *h1 = (int *)r1;
-	int *h2 = (int *)r2;
-	//LOGI("Looping histograms %d %d",h1[0], h2[0]);
-	for(int i=0;i<256;i++)
-		histogram[i] = h1[i]+h2[i];
-
-	delete imgR1;
-	delete imgR2;
-	}
-#endif
-#else
 	for(int i = region_top; i < region_bottom-1; i++) {
 		for(int j = 1; j < info.width-1; j++) {
 
@@ -385,7 +159,6 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 
 		}
 	}
-#endif
 
 	LOGI("Start adaptive thresholding");
 	double nrNonEdgePixels;
@@ -522,15 +295,17 @@ void processingRansac(AndroidBitmapInfo &info, void* pixels) {
 		loops--;
 	}
 
+	drawZebraCrossingFrame(info, pixels);
+
 	LOGI("Intersections! %d", max_inter);
 	for(size_t i =0;i< max_indices.size(); i++) {
 		const houghLM &current = hough_lines[max_indices[i]];
 		x0 = 0;
-		y0 = current.ro/sinT[(int)current.teta];
+		y0 = current.ro/sin(current.teta*3.14/180.0);
 		x1 = info.width;
-		y1 = (current.ro - x1*cosT[(int)current.teta])/sinT[(int)current.teta];
+		y1 = (current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0);
 		//LOGI("Attempting to draw %d %d %d %d", x0, y0, x1,y1);
-		drawZebraEdge(info, pixels,x0,y0,x1,y1, Color::Blue());
+		drawZebraEdge(info, pixels,x0,y0,x1,y1, Color::Red());
 		//drawLineBressenham(info, pixels,x0,y0,x1,y1, Color::Green());
 	}
 
@@ -595,9 +370,9 @@ void processingRansacZebra(AndroidBitmapInfo &info, void* pixels) {
 	for(size_t i =0;i< max_indices.size(); i++) {
 		houghLM &current = hough_lines[max_indices[i]];
 		x0 = 0;
-		y0 = current.ro/sinT[(int)current.teta];
+		y0 = current.ro/sin(current.teta*3.14/180.0);
 		x1 = info.width;
-		y1 = (current.ro - x1*cosT[(int)current.teta])/sinT[(int)current.teta];
+		y1 = (current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0);
 		//LOGI("Attempting to draw %d %d %d %d", x0, y0, x1,y1);
 		//drawZebraEdge(info, pixels,x0,y0,x1,y1, Color::Green());
 		drawLineBressenham(info, pixels,x0,y0,x1,y1, Color::Green());
@@ -641,16 +416,15 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 			index = i * info.width + j;
 			if(pixelsBuffer[index] > 0) {
 				for(int teta = 0; teta < houghDegreeNumber; teta+=houghIncrement) {
-					angle = (teta);
-					// LOGI("cos %f",cosT[(int)angle]);
-					rho = j*cosT[(int)angle] + (i-region_top) *sinT[(int)angle];
+					angle = (teta*3.14)/180.0;
+					rho = j*cos(angle) + (i-region_top) *sin(angle);
 					if (rho >= 0) {
 						/*if (teta < 45 || teta > 315) {
 							H[rho][teta]+=1 + cos(angle);
 						} else {
 							H[rho][teta]+=1;
 						}*/
-						H[rho][teta]+= cosT[(int)angle];
+						H[rho][teta]+= cos(angle);
 						if (H[rho][teta] > hmax) {
 							hmax = H[rho][teta];
 						}
@@ -680,7 +454,7 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 	houghLM current;
 
 	for(int i = m; i < diag - m; i++) {
-		for(int j = m; j < houghDegreeNumber - m; j+=2) {
+		for(int j = m; j < houghDegreeNumber - m; j++) {
 			//check for a threshold
 			if (H[i][j] > houghThreshold) {
 				max = true;
@@ -706,11 +480,11 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 
 	LOGI("Hough found %d local maximas.", nrMax);
 
-	int k = 0; /* Number of lines to display */
-	///k = nrMax;
-	//if (k > nrMax) {
+	int k = 50; /* Number of lines to display */
+	//k = nrMax;
+	if (k > nrMax) {
 		k = nrMax;
-	//}
+	}
 
 	hough_lines.clear();
 
@@ -730,9 +504,9 @@ void drawLines(AndroidBitmapInfo &info, void* pixels, vector<houghLM> lines) {
 	for (int i = 0; i < hough_lines.size(); i++) {
 		current = lines.at(i);
 		x0 = 0;
-		y0 = current.ro/sinT[(int)current.teta];
+		y0 = current.ro/sin(current.teta*3.14/180.0);
 		x1 = info.width;
-		y1 = (current.ro - x1*cosT[(int)current.teta])/sinT[(int)current.teta];
+		y1 = (current.ro - x1*cos(current.teta*3.14/180.0))/sin(current.teta*3.14/180.0);
 		drawLineBressenham(info, pixels ,x0,y0,x1,y1, Color::Red());
 	}
 }
@@ -780,87 +554,11 @@ void drawZebraEdge(AndroidBitmapInfo &info, void* pixels, int start_x, int start
 			//if ((left2->red > 120 || right2->red > 120 ) &&   abs(left2->red - right2->red) > 50 ) {
 			//if ((left2->red > 100 || right2->red > 100 ) &&   abs(left2->red - right2->red) > 30 ) {
 
-			if (((left2->red > 120 && (left2->red - right2->red > 30 ))) ||
+			/*if (((left2->red > 120 && (left2->red - right2->red > 30 ))) ||
 					((right2->red > 120 && (right2->red - left2->red > 30 )))) {
-				current->red = (uint8_t) c.r;
-				current->green = (uint8_t) c.g;
-				current->blue = (uint8_t) c.b;
-
-				}
-			} else {
-				if (showRansacLines) {
-					current->red = (uint8_t) 0;
-					current->green = (uint8_t) 255;
-					current->blue = (uint8_t) 0;
-				}
-			}
-		//}
-		if (start_x == end_x && start_y == end_y) {
-			break;
-		}
-
-		current_error = 2 * err;
-
-		if (current_error > - delta_y) {
-			err -= delta_y;
-			start_x += sign_x;
-		}
-
-		if (current_error < delta_x) {
-			err += delta_x;
-			start_y += sign_y;
-		}
-
-	} while (true);
-}
-
-
-void drawZebraEdge2(AndroidBitmapInfo &info, void* pixels, int start_x, int start_y, int end_x, int end_y, Color c) {
-	start_y += region_top;
-	end_y += region_top;
-	int delta_x = end_x-start_x;
-	delta_x = (delta_x > 0) ? delta_x : -delta_x;
-	int delta_y = end_y-start_y;
-	delta_y = (delta_y > 0) ? delta_y : -delta_y;
-
-
-	int sign_x = (start_x - end_x > 0 ) ? -1 : 1;
-	int sign_y = (start_y - end_y > 0 ) ? -1 : 1;
-	int err = delta_x - delta_y;
-	void* imageData;
-	rgba* current;
-	rgba* left1, *left2, *right1, *right2;
-	int current_error;
-	//LOGI("%d %d %d %d",start_x, end_x,  start_y, end_y);
-	do {
-
-		if (start_x < info.width-5 && start_x >= 5 && start_y < info.height && start_y >= region_top ) {
-			imageData = (char*) pixels + start_x*sizeof(rgba) + start_y * info.stride;
-
-			current = (rgba *) imageData;
-
-			imageData = (char*) imageData +  sizeof(rgba);
-			right1 = (rgba *) imageData;
-			imageData = (char*) imageData +  3 * sizeof(rgba);
-			right2 = (rgba *) imageData;
-
-			imageData = (char*) imageData - 5 * sizeof(rgba);
-			left1 = (rgba *) imageData;
-			imageData = (char*) imageData - sizeof(rgba);
-			left2 = (rgba *) imageData;
-
-
-			if (abs(left2->red - right2->red) > 10 ) {
-
-			}
-
-			//if (abs(left1->red -left2->red) < 30 && abs(right1->red -right2->red) < 30 )  {
-
-			//if ((left2->red > 120 || right2->red > 120 ) &&   abs(left2->red - right2->red) > 50 ) {
-			//if ((left2->red > 100 || right2->red > 100 ) &&   abs(left2->red - right2->red) > 30 ) {
-
-			if (((left2->red > 120 && (left2->red - right2->red > 30 ))) ||
-					((right2->red > 120 && (right2->red - left2->red > 30 )))) {
+				*/
+			if  (((abs(left2->red - right2->red) > 30 ) && ((left2->red > 120) || (right2->red > 120)))
+			 && (start_y >= topY && start_y <= bottomY)) {
 				current->red = (uint8_t) c.r;
 				current->green = (uint8_t) c.g;
 				current->blue = (uint8_t) c.b;
@@ -991,8 +689,7 @@ void drawZebraCrossingFrame(AndroidBitmapInfo &info, void* pixels) {
 	int zebraMean = 0;
 	int lastLineMean = 0;
 
-	int topY = -1;
-	int bottomY = -1;
+
 	int lineCount = 0;
 	lpSrc = (char *) lpSrc + info.stride * (info.height-5);
 
@@ -1002,7 +699,7 @@ void drawZebraCrossingFrame(AndroidBitmapInfo &info, void* pixels) {
 		for (int x = 0; x < info.width; x++) {
 			count += line[x].red;
 		}
-		if (lineCount > 2) {
+		if (lineCount > 3) {
 			lastLineMean = mean;
 			lineCount = 0;
 		} else {
@@ -1039,6 +736,34 @@ void drawZebraCrossingFrame(AndroidBitmapInfo &info, void* pixels) {
 
 }
 
+void cleanPixels(AndroidBitmapInfo &info, void* pixels) {
+	void* lpSrc = pixels;
+	rgba * line;
+	int count = 0;
+	int lineCount = 0;
+	int distance = 20;
+
+	lpSrc = (char *) lpSrc + info.stride * (info.height-5);
+
+	Color c = Color::Red();
+
+	for (int y = bottomY; y >= topY; y--) {
+		line = (rgba *) lpSrc;
+		count = 0;
+
+		distance = 0;
+		for (int x = 0; x < info.width; x++) {
+			if (line[x].blue == 255 ) {
+				line[x].red = 255;
+				line[x].red = 0;
+				line[x].red = 0;
+			}
+		}
+
+		lpSrc = (char *) lpSrc - info.stride;
+	}
+}
+
 void copyBufferToImage(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer) {
 	int index;
 	void* lpSrc = pixels;
@@ -1069,8 +794,8 @@ void copyBufferToImage(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer) {
 Point2D intersectionOfLines(float ro1, float teta1, float ro2, float teta2) {
 	Point2D point;
 
-	point.x = (1.0 * ro1 * sinT [(int)teta2] - 1.0 * ro2 * sinT[(int)teta1])/sinT[(int)(teta2-teta1)];
-	point.y = (1.0 * ro1 * cosT [(int)teta2] - 1.0 * ro2 * cosT[(int)teta1])/sinT[(int)(teta1-teta2)];
+	point.x = (1.0 * ro1 * sin (teta2 * PI/180) - 1.0 * ro2 * sin(teta1* PI/180))/sin((teta2-teta1) * PI/180);
+	point.y = (1.0 * ro1 * cos (teta2 * PI/180) - 1.0 * ro2 * cos(teta1* PI/180))/sin((teta1-teta2) * PI/180);
 
 	return point;
 }
@@ -1082,7 +807,7 @@ Point2D intersectionOfLines(float ro1, float teta1, float ro2, float teta2) {
  */
 
 bool isOnLine(int x, int y, float ro, float teta) {
-	float buffer = x * cosT[(int)teta] + y * sinT [(int)teta];
+	float buffer = x * cos(teta * PI/180) + y * sin (teta * PI/180);
 	return (abs((long) (buffer - ro)) >= 0 && abs((long)(buffer - ro)) <= 5);
 	//return (ro == buffer)
 }

@@ -107,13 +107,12 @@ void drawZebraEdge(AndroidBitmapInfo &info, void* pixels, int start_x, int start
 
 void drawTestLines(AndroidBitmapInfo &info, void* pixels);
 void drawHoughLines(AndroidBitmapInfo &info, void* pixels);
+void cleanPixels(AndroidBitmapInfo &info, void* pixels);
 
 /*
  * Helper functions for lines
  */
 Point2D intersectionOfLines(float ro1, float teta1, float ro2, float teta2);
 bool isOnLine(int x, int y, float ro, float teta);
-
-void fillLuts();
 
 #endif /* PROCESSING_H_ */

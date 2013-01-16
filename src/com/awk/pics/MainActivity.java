@@ -51,7 +51,6 @@ public class MainActivity extends Activity {
 	}
 
 	private static native void processImage(Bitmap bitmap, long operation);
-	private static native void fillCosSinTables();
 
 	private void getPictureFromGalleryIntent() {
 		final Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
@@ -134,8 +133,6 @@ public class MainActivity extends Activity {
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
-		Toast.makeText(this, "cookie", Toast.LENGTH_LONG).show();
-		fillCosSinTables();
 
 		// Set up the action bar to show a dropdown list.
 		final ActionBar actionBar = getActionBar();
@@ -162,7 +159,6 @@ public class MainActivity extends Activity {
 
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
-		// fillCosSinTables();
 		// Inflate the menu; this adds items to the action bar if it is present.
 		getMenuInflater().inflate(R.menu.picturemenu, menu);
 
