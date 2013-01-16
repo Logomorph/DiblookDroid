@@ -16,9 +16,9 @@
 #define WEAK_EDGE 128
 #define STRONG_EDGE 255
 
-#define SHOULD_MULTITHREAD_MO // comment this to stop multithreading
+//#define SHOULD_MULTITHREAD_MO // comment this to stop multithreading
 //#define QUAD_CORE_MO // if this is commented, runs on 2 threads. otherwise 4
-#define SHOULD_MULTITHREAD_MS // comment this to stop multithreading
+//#define SHOULD_MULTITHREAD_MS // comment this to stop multithreading
 //#define QUAD_CORE_MS // if this is commented, runs on 2 threads. otherwise 4
 
 
@@ -43,15 +43,43 @@ int region_bottom;
 
 void drawLines(AndroidBitmapInfo &info, void* pixels, vector<houghLM> lines);
 
-double sinT[360];
-double cosT[360];
+double sinTable[360];
+double cosTable[360];
 
 void fillLuts() {
-	for(int i=0;i<360;i++) {
+	for(int i=0;i<=360;i++) {
 			float angle = i*3.14/180.0;
-			sinT[i] = sin(angle);
-			cosT[i] = cos(angle);
+			sinTable[i] = sin(angle);
+			cosTable[i] = cos(angle);
 		}
+}
+
+double sinT(int value) {
+	/*if(value>359 || value <0)
+	{
+		LOGE("Wrong sin!!! %d", value);
+		return 0;
+	}*/
+	//LOGI("sin call %d", value);
+	if(value >359)
+		value -= (value/360)*360;
+	if(value < 0)
+		value += (360 +(int)abs(value/360)*360);
+	return sinTable[value];
+}
+
+double cosT(int value) {
+	/*if(value>359 || value <0)
+	{
+		LOGE("Wrong cos!!! %d", value);
+		return 0;
+	}*/
+	//LOGI("cos call %d", value);
+	if(value >359)
+		value -= (value/360)*360;
+	if(value < 0)
+		value += (360 + (int)abs(value/360)*360);
+	return cosTable[value];
 }
 
 int *array_one;
@@ -306,6 +334,10 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 	delete imgR2;
 	delete imgR3;
 	delete imgR4;
+	delete h1;
+	delete h2;
+	delete h3;
+	delete h4;
 	}
 #else
 	{
@@ -330,6 +362,8 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 
 	delete imgR1;
 	delete imgR2;
+	delete h1;
+	delete h2;
 	}
 #endif
 #else
@@ -526,9 +560,9 @@ void processingRansac(AndroidBitmapInfo &info, void* pixels) {
 	for(size_t i =0;i< max_indices.size(); i++) {
 		const houghLM &current = hough_lines[max_indices[i]];
 		x0 = 0;
-		y0 = current.ro/sinT[(int)current.teta];
+		y0 = current.ro/sinT((int)current.teta);
 		x1 = info.width;
-		y1 = (current.ro - x1*cosT[(int)current.teta])/sinT[(int)current.teta];
+		y1 = (current.ro - x1*cosT((int)current.teta))/sinT((int)current.teta);
 		//LOGI("Attempting to draw %d %d %d %d", x0, y0, x1,y1);
 		drawZebraEdge(info, pixels,x0,y0,x1,y1, Color::Blue());
 		//drawLineBressenham(info, pixels,x0,y0,x1,y1, Color::Green());
@@ -595,9 +629,9 @@ void processingRansacZebra(AndroidBitmapInfo &info, void* pixels) {
 	for(size_t i =0;i< max_indices.size(); i++) {
 		houghLM &current = hough_lines[max_indices[i]];
 		x0 = 0;
-		y0 = current.ro/sinT[(int)current.teta];
+		y0 = current.ro/sinT((int)current.teta);
 		x1 = info.width;
-		y1 = (current.ro - x1*cosT[(int)current.teta])/sinT[(int)current.teta];
+		y1 = (current.ro - x1*cosT((int)current.teta))/sinT((int)current.teta);
 		//LOGI("Attempting to draw %d %d %d %d", x0, y0, x1,y1);
 		//drawZebraEdge(info, pixels,x0,y0,x1,y1, Color::Green());
 		drawLineBressenham(info, pixels,x0,y0,x1,y1, Color::Green());
@@ -632,7 +666,7 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 
 	hmax = 0;
 	int rho = 0;
-	double angle;
+	//double angle;
 	rgba * line;
 	/* Compute the Hough Accumulator */
 	for(int i = region_top; i < region_bottom; i++) {
@@ -641,16 +675,24 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 			index = i * info.width + j;
 			if(pixelsBuffer[index] > 0) {
 				for(int teta = 0; teta < houghDegreeNumber; teta+=houghIncrement) {
-					angle = (teta);
+					//angle = (teta);
 					// LOGI("cos %f",cosT[(int)angle]);
-					rho = j*cosT[(int)angle] + (i-region_top) *sinT[(int)angle];
+					//LOGI("Ok");
+					rho = j*cosT(teta) + (i-region_top) *sinT(teta);
+					//LOGI("still OK %d", rho);
+					if(rho>=diag) {
+						//LOGE("rho out of bounds %d", rho);
+						continue;
+					}
 					if (rho >= 0) {
 						/*if (teta < 45 || teta > 315) {
 							H[rho][teta]+=1 + cos(angle);
 						} else {
 							H[rho][teta]+=1;
 						}*/
-						H[rho][teta]+= cosT[(int)angle];
+						//LOGI("Ok2 %f %f %d", angle, H[rho][teta], (int)angle);
+						H[rho][teta]+= cosT(teta);
+						//LOGI("still OK2");
 						if (H[rho][teta] > hmax) {
 							hmax = H[rho][teta];
 						}
@@ -661,6 +703,7 @@ void processingHough(AndroidBitmapInfo &info, uint8_t *pixelsBuffer) {
 		}
 	}
 
+	LOGI("Out loop");
 	/* Non maxima suppression */
 	int n = 5; //5, 7
 	int m = (n-1)/2;
@@ -730,9 +773,9 @@ void drawLines(AndroidBitmapInfo &info, void* pixels, vector<houghLM> lines) {
 	for (int i = 0; i < hough_lines.size(); i++) {
 		current = lines.at(i);
 		x0 = 0;
-		y0 = current.ro/sinT[(int)current.teta];
+		y0 = current.ro/sinT((int)current.teta);
 		x1 = info.width;
-		y1 = (current.ro - x1*cosT[(int)current.teta])/sinT[(int)current.teta];
+		y1 = (current.ro - x1*cosT((int)current.teta))/sinT((int)current.teta);
 		drawLineBressenham(info, pixels ,x0,y0,x1,y1, Color::Red());
 	}
 }
@@ -990,8 +1033,8 @@ void copyBufferToImage(AndroidBitmapInfo &info, void* pixels, uint8_t* buffer) {
 Point2D intersectionOfLines(float ro1, float teta1, float ro2, float teta2) {
 	Point2D point;
 
-	point.x = (1.0 * ro1 * sinT [(int)teta2] - 1.0 * ro2 * sinT[(int)teta1])/sinT[(int)(teta2-teta1)];
-	point.y = (1.0 * ro1 * cosT [(int)teta2] - 1.0 * ro2 * cosT[(int)teta1])/sinT[(int)(teta1-teta2)];
+	point.x = (1.0 * ro1 * sinT ((int)teta2) - 1.0 * ro2 * sinT((int)teta1))/sinT((int)(teta2-teta1));
+	point.y = (1.0 * ro1 * cosT ((int)teta2) - 1.0 * ro2 * cosT((int)teta1))/sinT((int)(teta1-teta2));
 
 	return point;
 }
@@ -1003,7 +1046,7 @@ Point2D intersectionOfLines(float ro1, float teta1, float ro2, float teta2) {
  */
 
 bool isOnLine(int x, int y, float ro, float teta) {
-	float buffer = x * cosT[(int)teta] + y * sinT [(int)teta];
+	float buffer = x * cosT((int)teta) + y * sinT ((int)teta);
 	return (abs((long) (buffer - ro)) >= 0 && abs((long)(buffer - ro)) <= 5);
 	//return (ro == buffer)
 }
