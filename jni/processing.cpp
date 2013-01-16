@@ -8,11 +8,18 @@
 
 #include "processing.h"
 #include "heap.h"
+#include <pthread.h>
+#include "helpers.h"
 
 #define kernelSize 5
 #define p 0.1
 #define WEAK_EDGE 128
 #define STRONG_EDGE 255
+
+#define SHOULD_MULTITHREAD_MO // comment this to stop multithreading
+//#define QUAD_CORE_MO // if this is commented, runs on 2 threads. otherwise 4
+#define SHOULD_MULTITHREAD_MS // comment this to stop multithreading
+//#define QUAD_CORE_MS // if this is commented, runs on 2 threads. otherwise 4
 
 
 #define houghDegreeNumber 360
@@ -47,6 +54,114 @@ void fillLuts() {
 		}
 }
 
+int *array_one;
+int *array_two;
+int *array_three;
+int *array_four;
+
+double pi = 3.1415f;
+double pi8 = pi/8.0;
+double pi4 = pi/4.0;
+double pi2 = pi/2.0;
+double pi78 = pi - pi8;
+double pi38 = pi4 + pi8;
+double pi58 = pi - pi38;
+
+void *mag_orient_function( void *ptr ) {
+	ImageRegion *img = (ImageRegion*) ptr;
+	double valuex, valuey;
+	uint8_t *image = img->image;
+	int w = img->iW;
+	int index;
+	double value = 4 * 1.41f;
+
+	for(int i = img->top; i < img->bottom; i++) {
+
+			for(int j = img->left; j < img->right; j++) {
+				index = i*w+j;
+
+				valuex = 2 * (image[index+1] - image[index-1]) -
+							  image[index-w-1] - image[index+w-1]
+							  + image[index-w+1] + image[index+w+1];
+
+				valuey =  2 * (image[index+w] - image[index-w]) -
+						  image[index-w-1] - image[index-w+1]
+						  + image[index+w-1] + image[index+w+1];
+
+				array_one[index] = sqrt(valuex*valuex + valuey*valuey)/value;
+				array_two[index] = atan2(valuey, valuex);
+
+			}
+		}
+}
+
+pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
+void *max_sup_function(void *ptr) {
+	ImageRegion *img = (ImageRegion*) ptr;
+	int w = img->iW;
+	int nrG0 = 0;
+	int index;
+	int *histogram  = new int[256]();
+	memset(histogram, 0, 256 * sizeof(int));
+
+	for(int i = img->top; i < img->bottom; i++) {
+		for(int j = img->left; j < img->right; j++) {
+
+			index = i*w+j;
+
+			//adaptive thresholding
+			if (array_one[index] == 0) {
+				nrG0++;
+			}
+
+			//compute maxima of current point
+			if ((array_two[index] >= -pi8 && array_two[index] <= pi8) ||
+				(array_two[index] >= pi78 && array_two[index] <= -pi) ||
+				(array_two[index] >= -pi && array_two[index] <= -pi78)) {
+
+				if (array_one[index] >= array_one[index+1] && array_one[index] >= array_one[index-1]) {
+					array_three[index] = array_one[index];
+				} else {
+					array_three[index] = 0;
+				}
+
+			} else if ((array_two[index] >= pi8 && array_two[i*w+j] <= pi38) ||
+				(array_two[index] >= -pi78 && array_two[index] <= -pi58)) {
+
+					if (array_one[index] >= array_one[(i+1)*w+j+1] && array_one[index] >= array_one[(i-1)*w+j-1]) {
+						array_three[index] = array_one[index];
+					} else {
+						array_three[index] = 0;
+					}
+
+			} else if ((array_two[index] >= pi38 && array_two[index] <= pi58) ||
+				(array_two[index] >= -pi58 && array_two[index] <= -pi38)) {
+
+					if (array_one[index] >= array_one[(i+1)*w+j] && array_one[index] >= array_one[(i-1)*w+j]) {
+						array_three[index] = array_one[index];
+					} else {
+						array_three[index] = 0;
+					}
+
+			} else {
+				if (array_one[index] >= array_one[(i+1)*w+j-1] && array_one[index] >= array_one[(i-1)*w+j+1]) {
+					array_three[index] = array_one[index];
+				} else {
+					array_three[index] = 0;
+				}
+			}
+
+			//add to histogram
+			//pthread_mutex_lock( &mutex1 );
+			histogram[(int)array_three[index]]++;
+			//pthread_mutex_unlock( &mutex1 );
+
+		}
+	}
+
+	return (void*) histogram;
+	//pthread_exit(histogram);
+}
 /*
  * Use this now
  */
@@ -59,10 +174,10 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 	int index;
 
 	//general purpose reusables
-	int *array_one = new int[info.height * info.width];
-	int *array_two = new int[info.height * info.width];
-	int *array_three = new int[info.height * info.width];
-	int *array_four = new int[info.height * info.width];
+	array_one = new int[info.height * info.width];
+	array_two = new int[info.height * info.width];
+	array_three = new int[info.height * info.width];
+	array_four = new int[info.height * info.width];
 
 	region_top = info.height / 2;
 	region_bottom = info.height - 5;
@@ -73,6 +188,53 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 	//store this so we don't need to compute it each time
 	value = 4 * sqrt(2.0);
 
+#ifdef SHOULD_MULTITHREAD_MO
+
+#ifdef QUAD_CORE_MO
+	{
+	pthread_t t1,t2,t3,t4;
+
+	int ret1,ret2,ret3,ret4;
+	ImageRegion *imgR1 = new ImageRegion(image, w, 0, 1, info.width/2, region_top, region_bottom/2);
+	ImageRegion *imgR2 = new ImageRegion(image, w, 0, info.width/2 + 1, info.width-1, region_top, region_bottom/2);
+
+	ImageRegion *imgR3 = new ImageRegion(image, w, 0, 1, info.width/2, region_bottom/2+1, region_bottom-1);
+	ImageRegion *imgR4 = new ImageRegion(image, w, 0, info.width/2 + 1, info.width-1, region_bottom/2+1, region_bottom-1);
+
+	ret1 = pthread_create( &t1, NULL, mag_orient_function, (void*)imgR1);
+	ret2 = pthread_create( &t2, NULL, mag_orient_function, (void*)imgR2);
+	ret3 = pthread_create( &t3, NULL, mag_orient_function, (void*)imgR3);
+	ret4 = pthread_create( &t4, NULL, mag_orient_function, (void*)imgR4);
+
+	pthread_join( t1, NULL);
+	pthread_join( t2, NULL);
+	pthread_join( t3, NULL);
+	pthread_join( t4, NULL);
+
+	delete imgR1;
+	delete imgR2;
+	delete imgR3;
+	delete imgR4;
+	}
+#else
+	{
+	pthread_t t1,t2;
+
+	int ret1,ret2;
+	ImageRegion *imgR1 = new ImageRegion(image, w, 0, 1, info.width/2, region_top, region_bottom-1);
+	ImageRegion *imgR2 = new ImageRegion(image, w, 0, info.width/2 + 1, info.width-1, region_top, region_bottom-1);
+	ret1 = pthread_create( &t1, NULL, mag_orient_function, (void*)imgR1);
+	ret2 = pthread_create( &t2, NULL, mag_orient_function, (void*)imgR2);
+
+	pthread_join( t1, NULL);
+	pthread_join( t2, NULL);
+
+	delete imgR1;
+	delete imgR2;
+	}
+#endif
+
+#else
 	for(int i = region_top; i < region_bottom - 1; i++) {
 
 		for(int j = 1; j < info.width-1; j++) {
@@ -91,19 +253,13 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 
 		}
 	}
+#endif
 
 	LOGI("Start non-maxima suppression");
-	double pi = 4.0*atan(1.0);
 
 	/*
 	 * Perform non maxima supression
 	 */
-	double pi8 = pi/8.0;
-	double pi4 = pi/4.0;
-	double pi2 = pi/2.0;
-	double pi78 = pi - pi8;
-	double pi38 = pi4 + pi8;
-	double pi58 = pi - pi38;
 
 	int nrG0 = 0;	//used for adaptive thresholding
 
@@ -114,6 +270,69 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 	 * array_two - orientation
 	 * array_three - maximas
 	 */
+#ifdef SHOULD_MULTITHREAD_MS
+#ifdef QUAD_CORE_MS
+	{
+	pthread_t t1,t2,t3,t4;
+
+	int ret1,ret2,ret3,ret4;
+	ImageRegion *imgR1 = new ImageRegion(image, w, 0, 1, info.width/2, region_top, region_bottom/2);
+	ImageRegion *imgR2 = new ImageRegion(image, w, 0, info.width/2 + 1, info.width-1, region_top, region_bottom/2);
+
+	ImageRegion *imgR3 = new ImageRegion(image, w, 0, 1, info.width/2, region_bottom/2+1, region_bottom-1);
+	ImageRegion *imgR4 = new ImageRegion(image, w, 0, info.width/2 + 1, info.width-1, region_bottom/2+1, region_bottom-1);
+
+	ret1 = pthread_create( &t1, NULL, max_sup_function, (void*)imgR1);
+	ret2 = pthread_create( &t2, NULL, max_sup_function, (void*)imgR2);
+	ret3 = pthread_create( &t3, NULL, max_sup_function, (void*)imgR3);
+	ret4 = pthread_create( &t4, NULL, max_sup_function, (void*)imgR4);
+
+	void  *r1, *r2, *r3, *r4;
+	pthread_join( t1, &r1);
+	pthread_join( t2, &r2);
+	pthread_join( t3, &r3);
+	pthread_join( t4, &r4);
+
+	//LOGI("Combining histograms");
+	int *h1 = (int *)r1;
+	int *h2 = (int *)r2;
+	int *h3 = (int *)r3;
+	int *h4 = (int *)r4;
+	//LOGI("Looping histograms %d %d",h1[0], h2[0]);
+	for(int i=0;i<256;i++)
+		histogram[i] = h1[i]+h2[i]+h3[i]+h4[i];
+
+	delete imgR1;
+	delete imgR2;
+	delete imgR3;
+	delete imgR4;
+	}
+#else
+	{
+	pthread_t t1,t2;
+
+	int ret1,ret2;
+	ImageRegion *imgR1 = new ImageRegion(image, w, 0, 1, info.width/2, region_top, region_bottom-1);
+	ImageRegion *imgR2 = new ImageRegion(image, w, 0, info.width/2 + 1, info.width-1, region_top, region_bottom-1);
+	ret1 = pthread_create( &t1, NULL, max_sup_function, (void*)imgR1);
+	ret2 = pthread_create( &t2, NULL, max_sup_function, (void*)imgR2);
+
+	void  *r1, *r2;
+	pthread_join( t1, &r1);
+	pthread_join( t2, &r2);
+
+	//LOGI("Combining histograms");
+	int *h1 = (int *)r1;
+	int *h2 = (int *)r2;
+	//LOGI("Looping histograms %d %d",h1[0], h2[0]);
+	for(int i=0;i<256;i++)
+		histogram[i] = h1[i]+h2[i];
+
+	delete imgR1;
+	delete imgR2;
+	}
+#endif
+#else
 	for(int i = region_top; i < region_bottom-1; i++) {
 		for(int j = 1; j < info.width-1; j++) {
 
@@ -166,6 +385,7 @@ void optimizedCanny(AndroidBitmapInfo &info, uint8_t *image) {
 
 		}
 	}
+#endif
 
 	LOGI("Start adaptive thresholding");
 	double nrNonEdgePixels;
