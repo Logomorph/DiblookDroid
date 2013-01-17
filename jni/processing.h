@@ -115,4 +115,6 @@ void cleanPixels(AndroidBitmapInfo &info, void* pixels);
 Point2D intersectionOfLines(float ro1, float teta1, float ro2, float teta2);
 bool isOnLine(int x, int y, float ro, float teta);
 
+void fillLuts();
+
 #endif /* PROCESSING_H_ */

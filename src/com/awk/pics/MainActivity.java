@@ -51,6 +51,7 @@ public class MainActivity extends Activity {
 	}
 
 	private static native void processImage(Bitmap bitmap, long operation);
+	private static native void fillCosSinTables();
 
 	private void getPictureFromGalleryIntent() {
 		final Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
@@ -133,6 +134,7 @@ public class MainActivity extends Activity {
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
+		fillCosSinTables();
 
 		// Set up the action bar to show a dropdown list.
 		final ActionBar actionBar = getActionBar();
