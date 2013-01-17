@@ -688,7 +688,8 @@ void drawZebraCrossingFrame(AndroidBitmapInfo &info, void* pixels) {
 	int startingMean = 0;
 	int zebraMean = 0;
 	int lastLineMean = 0;
-
+	bottomY = -1;
+	topY = -1;
 
 	int lineCount = 0;
 	lpSrc = (char *) lpSrc + info.stride * (info.height-5);
